@@ -1,7 +1,7 @@
 from datetime import timedelta
 import os
 from typing import List, Optional
-from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File, APIRouter
 from fastapi.encoders import jsonable_encoder
 from datetime import datetime
 from fastapi.security import OAuth2PasswordRequestForm
@@ -19,10 +19,22 @@ task_queue = Queue(connection=redis_conn)
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="User Management API")
+# 创建主应用
+app = FastAPI()
 
-# 添加CORS中间件
-app.add_middleware(
+# 创建API子应用
+api_app = FastAPI(
+    title="User Management API",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
+)
+
+# 将API子应用挂载到/api路径
+app.mount("/api", api_app)
+
+# 添加CORS中间件到API子应用
+api_app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -30,7 +42,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.post("/token", response_model=schemas.Token)
+@api_app.post("/token", response_model=schemas.Token)
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
@@ -48,7 +60,7 @@ async def login_for_access_token(
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/users/register", response_model=schemas.User)
+@api_app.post("/users/register", response_model=schemas.User)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
@@ -68,11 +80,11 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.refresh(db_user)
     return db_user
 
-@app.get("/users/me", response_model=schemas.User)
+@api_app.get("/users/me", response_model=schemas.User)
 async def read_users_me(current_user: models.User = Depends(auth.get_current_active_user)):
     return current_user
 
-@app.get("/users", response_model=List[schemas.User])
+@api_app.get("/users", response_model=List[schemas.User])
 async def list_users(
     skip: int = 0,
     limit: int = 100,
@@ -82,7 +94,7 @@ async def list_users(
     users = db.query(models.User).offset(skip).limit(limit).all()
     return users
 
-@app.get("/users/{user_id}", response_model=schemas.User)
+@api_app.get("/users/{user_id}", response_model=schemas.User)
 async def get_user(
     user_id: int,
     current_user: models.User = Depends(auth.check_admin_user),
@@ -93,7 +105,7 @@ async def get_user(
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@app.put("/users/{user_id}", response_model=schemas.User)
+@api_app.put("/users/{user_id}", response_model=schemas.User)
 async def update_user(
     user_id: int,
     user_role: UserRole,
@@ -109,7 +121,7 @@ async def update_user(
     db.refresh(db_user)
     return db_user
 
-@app.delete("/users/{user_id}", response_model=schemas.User)
+@api_app.delete("/users/{user_id}", response_model=schemas.User)
 async def delete_user(
     user_id: int,
     current_user: models.User = Depends(auth.check_admin_user),
@@ -133,7 +145,7 @@ async def delete_user(
     return db_user
 
 # 文章类型管理API
-@app.post("/article-types", response_model=schemas.ArticleType)
+@api_app.post("/article-types", response_model=schemas.ArticleType)
 async def create_article_type(
     article_type: schemas.ArticleTypeCreate,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -151,7 +163,7 @@ async def create_article_type(
     db.refresh(db_article_type)
     return db_article_type
 
-@app.get("/article-types", response_model=List[schemas.ArticleType])
+@api_app.get("/article-types", response_model=List[schemas.ArticleType])
 async def get_article_types(
     skip: int = 0,
     limit: int = 100,
@@ -165,7 +177,7 @@ async def get_article_types(
     ).offset(skip).limit(limit).all()
     return article_types
 
-@app.put("/article-types/{article_type_id}", response_model=schemas.ArticleType)
+@api_app.put("/article-types/{article_type_id}", response_model=schemas.ArticleType)
 async def update_article_type(
     article_type_id: int,
     article_type: schemas.ArticleTypeUpdate,
@@ -185,7 +197,7 @@ async def update_article_type(
     db.refresh(db_article_type)
     return db_article_type
 
-@app.delete("/article-types/{article_type_id}")
+@api_app.delete("/article-types/{article_type_id}")
 async def delete_article_type(
     article_type_id: int,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -202,7 +214,7 @@ async def delete_article_type(
     return {"message": "Article type deleted successfully"}
 
 # 文章管理API
-@app.post("/articles", response_model=schemas.Article)
+@api_app.post("/articles", response_model=schemas.Article)
 async def create_article(
     article: schemas.ArticleCreate,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -218,7 +230,7 @@ async def create_article(
     db.refresh(db_article)
     return db_article
 
-@app.get("/articles", response_model=List[schemas.Article])
+@api_app.get("/articles", response_model=List[schemas.Article])
 async def get_articles(
     skip: int = 0,
     limit: int = 100,
@@ -228,7 +240,7 @@ async def get_articles(
     articles = db.query(models.Article).offset(skip).limit(limit).all()
     return articles
 
-@app.get("/articles/{article_id}", response_model=schemas.Article)
+@api_app.get("/articles/{article_id}", response_model=schemas.Article)
 async def get_article(
     article_id: int,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -239,7 +251,7 @@ async def get_article(
         raise HTTPException(status_code=404, detail="Article not found")
     return article
 
-@app.put("/articles/{article_id}", response_model=schemas.Article)
+@api_app.put("/articles/{article_id}", response_model=schemas.Article)
 async def update_article(
     article_id: int,
     article: schemas.ArticleUpdate,
@@ -258,7 +270,7 @@ async def update_article(
     db.refresh(db_article)
     return db_article
 
-@app.delete("/articles/{article_id}")
+@api_app.delete("/articles/{article_id}")
 async def delete_article(
     article_id: int,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -272,7 +284,7 @@ async def delete_article(
     db.commit()
     return {"message": "Article deleted successfully"}
 
-@app.post("/articles/{article_id}/review", response_model=schemas.Job)
+@api_app.post("/articles/{article_id}/review", response_model=schemas.Job)
 async def create_article_review(
     article_id: int,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -307,7 +319,7 @@ async def create_article_review(
     
     return db_job
 
-@app.delete("/articles")
+@api_app.delete("/articles")
 async def delete_all_articles(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(get_db)
@@ -318,7 +330,7 @@ async def delete_all_articles(
     return {"message": "All articles deleted successfully"}
 
 # AI批阅报告管理API
-@app.post("/ai-reviews", response_model=schemas.AIReviewReport)
+@api_app.post("/ai-reviews", response_model=schemas.AIReviewReport)
 async def create_ai_review(
     ai_review: schemas.AIReviewReportCreate,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -334,7 +346,7 @@ async def create_ai_review(
     db.refresh(db_ai_review)
     return db_ai_review
 
-@app.get("/ai-reviews", response_model=List[schemas.AIReviewReport])
+@api_app.get("/ai-reviews", response_model=List[schemas.AIReviewReport])
 async def get_ai_reviews(
     article_id: int,
     skip: int = 0,
@@ -347,7 +359,7 @@ async def get_ai_reviews(
     ).offset(skip).limit(limit).all()
     return ai_reviews
 
-@app.put("/ai-reviews/{ai_review_id}", response_model=schemas.AIReviewReport)
+@api_app.put("/ai-reviews/{ai_review_id}", response_model=schemas.AIReviewReport)
 async def update_ai_review(
     ai_review_id: int,
     ai_review: schemas.AIReviewReportUpdate,
@@ -366,7 +378,7 @@ async def update_ai_review(
     return db_ai_review
 
 # 项目相关API
-@app.post("/projects", response_model=schemas.Project)
+@api_app.post("/projects", response_model=schemas.Project)
 async def create_project(
     project: schemas.ProjectCreate,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -407,7 +419,7 @@ async def create_project(
     db.refresh(db_project)
     return db_project
 
-@app.get("/projects", response_model=List[schemas.Project])
+@api_app.get("/projects", response_model=List[schemas.Project])
 async def get_projects(
     skip: int = 0,
     limit: int = 100,
@@ -419,7 +431,7 @@ async def get_projects(
     ).offset(skip).limit(limit).all()
     return projects
 
-@app.get("/projects/{project_id}", response_model=schemas.Project)
+@api_app.get("/projects/{project_id}", response_model=schemas.Project)
 async def get_project(
     project_id: int,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -432,7 +444,7 @@ async def get_project(
         raise HTTPException(status_code=403, detail="Not authorized to access this project")
     return project
 
-@app.put("/projects/{project_id}", response_model=schemas.Project)
+@api_app.put("/projects/{project_id}", response_model=schemas.Project)
 async def update_project(
     project_id: int,
     project: schemas.ProjectUpdate,
@@ -458,7 +470,7 @@ async def update_project(
     db.refresh(db_project)
     return db_project
 
-@app.delete("/projects/{project_id}")
+@api_app.delete("/projects/{project_id}")
 async def delete_project(
     project_id: int,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -475,7 +487,7 @@ async def delete_project(
     return {"message": "Project deleted successfully"}
 
 # Job相关API
-@app.post("/jobs", response_model=schemas.Job)
+@api_app.post("/jobs", response_model=schemas.Job)
 async def create_job(
     project_id: int,
     file: UploadFile = File(...),
@@ -519,7 +531,7 @@ async def create_job(
     
     return db_job
 
-@app.get("/jobs", response_model=List[schemas.Job])
+@api_app.get("/jobs", response_model=List[schemas.Job])
 async def get_jobs(
     project_id: Optional[int] = None,
     skip: int = 0,
@@ -533,7 +545,7 @@ async def get_jobs(
         models.Job.project_id == models.Project.id
     ).filter(
         models.Project.owner_id == current_user.id
-    )
+    ).order_by(models.Job.id.desc())
     
     # 如果提供了project_id，添加项目过滤条件
     if project_id is not None:
@@ -550,7 +562,7 @@ async def get_jobs(
     jobs = query.offset(skip).limit(limit).all()
     return jobs
 
-@app.get("/jobs/{job_id}", response_model=schemas.Job)
+@api_app.get("/jobs/{job_id}", response_model=schemas.Job)
 async def get_job(
     job_id: int,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -570,7 +582,7 @@ async def get_job(
     
     return job
 
-@app.post("/jobs/{job_id}/action", response_model=schemas.Job)
+@api_app.post("/jobs/{job_id}/action", response_model=schemas.Job)
 async def job_action(
     job_id: int,
     action: schemas.JobAction,
@@ -644,7 +656,7 @@ async def job_action(
     db.refresh(job)
     return job
 
-@app.post("/jobs/cancel-all")
+@api_app.post("/jobs/cancel-all")
 async def cancel_all_jobs(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(get_db)
@@ -673,7 +685,7 @@ async def cancel_all_jobs(
         "cancelled_jobs": len(active_jobs)
     }
 
-@app.put("/jobs/{job_id}", response_model=schemas.Job)
+@api_app.put("/jobs/{job_id}", response_model=schemas.Job)
 async def update_job(
     job_id: int,
     job_update: schemas.JobUpdate,

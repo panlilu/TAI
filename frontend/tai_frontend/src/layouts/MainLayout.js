@@ -5,6 +5,8 @@ import {
   DashboardOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  FileTextOutlined,
+  ScheduleOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -27,8 +29,18 @@ const MainLayout = ({ children }) => {
         key: '/user',
         icon: <UserOutlined />,
         label: '用户管理',
+      },
+      {
+        key: '/article-type',
+        icon: <FileTextOutlined />,
+        label: '文章类型',
       }
-    ] : [])
+    ] : []),
+    {
+      key: '/jobs',
+      icon: <ScheduleOutlined />,
+      label: '任务管理',
+    }
   ];
 
   return (

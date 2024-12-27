@@ -8,6 +8,8 @@ import LoginPage from './pages/login';
 import RegisterPage from './pages/register';
 import Dashboard from './pages/dashboard';
 import UserManagement from './pages/user';
+import ArticleType from './pages/article-type';
+import Jobs from './pages/jobs';
 import AuthRoute from './components/AuthRoute';
 
 import './App.css';
@@ -38,6 +40,28 @@ function App() {
               <AuthRoute requiredRole="admin">
                 <MainLayout>
                   <UserManagement />
+                </MainLayout>
+              </AuthRoute>
+            }
+          />
+
+          <Route
+            path="/article-type"
+            element={
+              <AuthRoute requiredRole="admin">
+                <MainLayout>
+                  <ArticleType />
+                </MainLayout>
+              </AuthRoute>
+            }
+          />
+
+          <Route
+            path="/jobs"
+            element={
+              <AuthRoute>
+                <MainLayout>
+                  <Jobs />
                 </MainLayout>
               </AuthRoute>
             }
