@@ -1,6 +1,8 @@
-from sqlalchemy import Boolean, Column, Integer, String, Enum
+from sqlalchemy import Boolean, Column, Integer, String, Enum, ForeignKey, JSON, DateTime
+from sqlalchemy.orm import relationship
 from .database import Base
 import enum
+from datetime import datetime
 
 class UserRole(str, enum.Enum):
     ADMIN = "admin"
@@ -15,3 +17,42 @@ class User(Base):
     hashed_password = Column(String)
     role = Column(Enum(UserRole), default=UserRole.NORMAL)
     is_active = Column(Boolean, default=True)
+    
+    article_types = relationship("ArticleType", back_populates="owner")
+
+class ArticleType(Base):
+    __tablename__ = "article_types"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)  # 文章类型名称
+    is_public = Column(Boolean, default=False)  # 是否为公共类型
+    prompt = Column(String)  # 审核用的prompt
+    fields = Column(JSON)  # 自定义结构化数据字段
+    owner_id = Column(Integer, ForeignKey("users.id"))  # 创建者ID
+    
+    owner = relationship("User", back_populates="article_types")
+    articles = relationship("Article", back_populates="article_type")
+
+class Article(Base):
+    __tablename__ = "articles"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)  # 文章名称
+    attachments = Column(JSON)  # 附件列表
+    article_type_id = Column(Integer, ForeignKey("article_types.id"))  # 文章类型ID
+    created_at = Column(DateTime, default=datetime.utcnow)  # 创建时间
+    
+    article_type = relationship("ArticleType", back_populates="articles")
+    ai_reviews = relationship("AIReviewReport", back_populates="article")
+
+class AIReviewReport(Base):
+    __tablename__ = "ai_review_reports"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    article_id = Column(Integer, ForeignKey("articles.id"))  # 关联的文章ID
+    source_data = Column(String)  # 源数据
+    structured_data = Column(JSON)  # 结构化数据
+    created_at = Column(DateTime, default=datetime.utcnow)  # 创建时间
+    is_active = Column(Boolean, default=False)  # 是否为当前激活的批阅报告
+    
+    article = relationship("Article", back_populates="ai_reviews")
