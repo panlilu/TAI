@@ -25,12 +25,20 @@ request.interceptors.response.use(
     return response.data;
   },
   (error) => {
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('userRole');
-      window.location.href = '/login';
+    // 确保错误对象包含完整的响应信息
+    if (error.response) {
+      error.response.data = error.response.data || {};
+      // 只有在非登录页面时，401错误才自动重定向到登录页
+      if (error.response.status === 401 && !window.location.pathname.includes('/login')) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userRole');
+        window.location.href = '/login';
+      }
     }
-    return Promise.reject(error);
+    return Promise.reject({
+      ...error,
+      message: error.response?.data?.detail || error.response?.data?.message || error.message
+    });
   }
 );
 

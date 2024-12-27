@@ -1,13 +1,17 @@
 import request from '../utils/request';
 
 export const login = (data) => {
+  const params = new URLSearchParams();
+  params.append('username', data.username);
+  params.append('password', data.password);
+  
   return request({
     url: '/token',
     method: 'post',
-    data: {
-      username: data.username,
-      password: data.password,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
     },
+    data: params
   });
 };
 
@@ -28,11 +32,13 @@ export const getUserList = (params) => {
 };
 
 
-export const updateUser = (id, data) => {
+export const updateUser = (id, role) => {
   return request({
     url: `/users/${id}`,
     method: 'put',
-    data,
+    params: {
+      user_role: role
+    }
   });
 };
 

@@ -2,6 +2,7 @@ from datetime import timedelta
 from typing import List
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from . import models, schemas, auth
@@ -11,6 +12,15 @@ from .models import UserRole
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="User Management API")
+
+# 添加CORS中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/token", response_model=schemas.Token)
 async def login_for_access_token(

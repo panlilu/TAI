@@ -8,6 +8,7 @@ import './style.css';
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const [messageApi, contextHolder] = message.useMessage();
 
   const onFinish = async (values) => {
     try {
@@ -19,21 +20,28 @@ const LoginPage = () => {
         method: 'get'
       });
       localStorage.setItem('userRole', userResponse.role);
-      message.success('登录成功！');
+      messageApi.success('登录成功！');
       navigate('/dashboard');
     } catch (error) {
-      message.error(error.response?.data?.detail || '登录失败，请重试');
+      console.error('Login error:', error);
+      // 使用统一处理后的错误信息
+      messageApi.error(error.message || '登录失败，请检查用户名和密码');
     }
   };
 
   return (
     <div className="login-container">
+      {contextHolder}
       <div className="login-form">
-        <h1>系统登录</h1>
+        <h1>Teaching Assistant AI</h1>
         <Form
           name="login"
           onFinish={onFinish}
           autoComplete="off"
+          onFinishFailed={({ values, errorFields, outOfDate }) => {
+            // 处理表单验证失败的情况
+            messageApi.error('请正确填写表单');
+          }}
         >
           <Form.Item
             name="username"
