@@ -56,6 +56,7 @@ class AIReviewReport(Base):
     article_id = Column(Integer, ForeignKey("articles.id"))  # 关联的文章ID
     source_data = Column(String)  # 源数据
     structured_data = Column(JSON)  # 结构化数据
+    processed_attachment_text = Column(Text)  # 处理后的附件文本内容
     created_at = Column(DateTime, default=datetime.utcnow)  # 创建时间
     is_active = Column(Boolean, default=False)  # 是否为当前激活的批阅报告
     
