@@ -27,8 +27,8 @@ class ArticleType(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)  # 文章类型名称
     is_public = Column(Boolean, default=False)  # 是否为公共类型
-    prompt = Column(String)  # 审核用的prompt
-    schema_prompt = Column(String)  # 用于生成格式化数据的prompt
+    prompt = Column(String, default="")  # 审核用的prompt
+    schema_prompt = Column(String, default="")  # 用于生成格式化数据的prompt
     fields = Column(JSON)  # 自定义结构化数据字段
     owner_id = Column(Integer, ForeignKey("users.id"))  # 创建者ID
     
@@ -67,8 +67,8 @@ class Project(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)  # 项目名称
-    prompt = Column(String)  # 审核用的prompt
-    schema_prompt = Column(String)  # 用于生成格式化数据的prompt
+    prompt = Column(String, default="")  # 审核用的prompt
+    schema_prompt = Column(String, default="")  # 用于生成格式化数据的prompt
     fields = Column(JSON)  # 自定义结构化数据字段
     auto_approve = Column(Boolean, default=True)  # 是否自动审批
     owner_id = Column(Integer, ForeignKey("users.id"))  # 创建者ID

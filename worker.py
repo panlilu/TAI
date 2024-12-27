@@ -1,5 +1,9 @@
+import os
 from redis import Redis
 from rq import Worker, Queue
+
+# 设置MacOS上的fork安全环境变量
+os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
 
 listen = ['default']
 

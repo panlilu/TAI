@@ -210,7 +210,7 @@ async def create_article(
 ):
     db_article = models.Article(
         name=article.name,
-        attachments=article.attachments,
+        attachments=jsonable_encoder(article.attachments),
         article_type_id=article.article_type_id
     )
     db.add(db_article)
@@ -250,8 +250,10 @@ async def update_article(
     if db_article is None:
         raise HTTPException(status_code=404, detail="Article not found")
     
-    db_article.name = article.name
-    db_article.attachments = article.attachments
+    if article.name is not None:
+        db_article.name = article.name
+    if article.attachments is not None:
+        db_article.attachments = jsonable_encoder(article.attachments)
     db.commit()
     db.refresh(db_article)
     return db_article
@@ -269,6 +271,41 @@ async def delete_article(
     db.delete(db_article)
     db.commit()
     return {"message": "Article deleted successfully"}
+
+@app.post("/articles/{article_id}/review", response_model=schemas.Job)
+async def create_article_review(
+    article_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 检查文章是否存在
+    article = db.query(models.Article).filter(models.Article.id == article_id).first()
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    # 检查文章是否属于项目
+    if not article.project_id:
+        raise HTTPException(status_code=400, detail="Article must belong to a project")
+    
+    # 创建job记录
+    db_job = models.Job(
+        project_id=article.project_id,
+        task="process_ai_review",
+        status=schemas.JobStatus.PENDING,
+        progress=0,
+        logs=""
+    )
+    db.add(db_job)
+    db.commit()
+    db.refresh(db_job)
+    
+    # 将任务加入队列
+    task_queue.enqueue(
+        tasks.process_ai_review,
+        args=(article_id, db_job.id)
+    )
+    
+    return db_job
 
 @app.delete("/articles")
 async def delete_all_articles(
@@ -355,10 +392,11 @@ async def create_project(
     else:
         project_name = project.name
     
-    # 创建project，从article_type复制prompt和fields
+    # 创建project，从article_type复制prompt、schema_prompt和fields
     db_project = models.Project(
         name=project_name,
         prompt=article_type.prompt,
+        schema_prompt=article_type.schema_prompt,
         fields=article_type.fields,
         auto_approve=project.auto_approve,
         owner_id=current_user.id,
@@ -452,14 +490,6 @@ async def create_job(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found or not authorized")
     
-    # 确保uploads目录存在
-    os.makedirs("uploads", exist_ok=True)
-    
-    # 保存上传文件
-    file_path = f"uploads/{file.filename}"
-    with open(file_path, "wb") as buffer:
-        buffer.write(await file.read())
-    
     # 创建job记录
     db_job = models.Job(
         project_id=project_id,
@@ -471,6 +501,15 @@ async def create_job(
     db.add(db_job)
     db.commit()
     db.refresh(db_job)
+    
+    # 创建按用户ID和任务ID组织的目录结构
+    upload_dir = f"uploads/{current_user.id}/{db_job.id}"
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    # 保存上传文件
+    file_path = f"{upload_dir}/{file.filename}"
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
     
     # 将任务加入队列
     task_queue.enqueue(
@@ -563,13 +602,43 @@ async def job_action(
         # 重新加入队列
         task_queue.enqueue(
             tasks.process_upload,
-            args=(str(job.id), f"uploads/{job.id}", job.project_id)  # 使用位置参数确保正确的参数顺序
+            args=(str(job.id), f"uploads/{current_user.id}/{job.id}", job.project_id)  # 使用位置参数确保正确的参数顺序
         )
     
     elif action.action == schemas.JobAction.CANCEL:
         if job.status in [schemas.JobStatus.COMPLETED, schemas.JobStatus.FAILED, schemas.JobStatus.CANCELLED]:
             raise HTTPException(status_code=400, detail="Cannot cancel completed, failed or cancelled jobs")
         job.status = schemas.JobStatus.CANCELLED
+    
+    elif action.action == schemas.JobAction.RETRY:
+        # 只有已完成、失败或取消的任务可以重试
+        if job.status not in [schemas.JobStatus.COMPLETED, schemas.JobStatus.FAILED, schemas.JobStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail="Can only retry completed, failed or cancelled jobs")
+        
+        # 重置任务状态和进度
+        job.status = schemas.JobStatus.PENDING
+        job.progress = 0
+        job.logs = ""
+        
+        # 根据任务类型重新加入队列
+        if job.task == "process_upload":
+            # 对于上传任务，使用已存在的文件路径
+            file_path = f"uploads/{current_user.id}/{job.id}"
+            task_queue.enqueue(
+                tasks.process_upload,
+                args=(str(job.id), file_path, job.project_id)
+            )
+        elif job.task == "process_ai_review":
+            # 对于AI审阅任务，需要获取关联的文章ID
+            article = db.query(models.Article).filter(
+                models.Article.project_id == job.project_id
+            ).first()
+            if not article:
+                raise HTTPException(status_code=404, detail="Associated article not found")
+            task_queue.enqueue(
+                tasks.process_ai_review,
+                args=(article.id, job.id)
+            )
     
     db.commit()
     db.refresh(job)

@@ -16,6 +16,7 @@ class JobAction(str, Enum):
     PAUSE = "pause"
     RESUME = "resume"
     CANCEL = "cancel"
+    RETRY = "retry"
 
 class UserBase(BaseModel):
     username: str
@@ -45,14 +46,14 @@ class ArticleTypeBase(BaseModel):
     is_public: bool
     prompt: str
     schema_prompt: str
-    fields: list[str]
+    fields: dict
 
 class ArticleTypeCreate(ArticleTypeBase):
     pass
 
 class ArticleType(ArticleTypeBase):
     id: int
-    owner_id: int
+    owner_id: int | None
 
     model_config = {
         "from_attributes": True
@@ -62,7 +63,7 @@ class ArticleTypeUpdate(BaseModel):
     name: Optional[str] = None
     prompt: Optional[str] = None
     schema_prompt: Optional[str] = None
-    fields: Optional[list[str]] = None
+    fields: Optional[dict] = None
 
 # 附件相关模型
 class AttachmentSchema(BaseModel):
@@ -102,7 +103,11 @@ class AttachmentUpdate(BaseModel):
 # AI批阅报告相关模型
 class AIReviewReportBase(BaseModel):
     source_data: str
-    structured_data: dict
+    structured_data: dict | None = None
+
+    @field_serializer('structured_data')
+    def serialize_structured_data(self, data: dict | None) -> dict:
+        return data if data is not None else {}
 
 class AIReviewReportCreate(AIReviewReportBase):
     article_id: int
@@ -131,7 +136,7 @@ class ProjectBase(BaseModel):
     name: str
     prompt: str
     schema_prompt: str
-    fields: list[str]
+    fields: dict
     auto_approve: bool = True
 
 class ProjectCreate(BaseModel):
@@ -152,7 +157,7 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     prompt: Optional[str] = None
     schema_prompt: Optional[str] = None
-    fields: Optional[list[str]] = None
+    fields: Optional[dict] = None
     auto_approve: Optional[bool] = None
 
 # Job相关模型
