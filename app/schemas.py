@@ -44,6 +44,7 @@ class ArticleTypeBase(BaseModel):
     name: str
     is_public: bool
     prompt: str
+    schema_prompt: str
     fields: list[str]
 
 class ArticleTypeCreate(ArticleTypeBase):
@@ -60,12 +61,20 @@ class ArticleType(ArticleTypeBase):
 class ArticleTypeUpdate(BaseModel):
     name: Optional[str] = None
     prompt: Optional[str] = None
+    schema_prompt: Optional[str] = None
     fields: Optional[list[str]] = None
+
+# 附件相关模型
+class AttachmentSchema(BaseModel):
+    path: str
+    is_active: bool
+    filename: str
+    created_at: str
 
 # 文章相关模型
 class ArticleBase(BaseModel):
     name: str
-    attachments: list[str]
+    attachments: list[AttachmentSchema]
     article_type_id: int
 
 class ArticleCreate(ArticleBase):
@@ -85,7 +94,10 @@ class Article(ArticleBase):
 
 class ArticleUpdate(BaseModel):
     name: Optional[str] = None
-    attachments: Optional[list[str]] = None
+    attachments: Optional[list[AttachmentSchema]] = None
+
+class AttachmentUpdate(BaseModel):
+    is_active: bool
 
 # AI批阅报告相关模型
 class AIReviewReportBase(BaseModel):
@@ -118,6 +130,7 @@ class AIReviewReportUpdate(BaseModel):
 class ProjectBase(BaseModel):
     name: str
     prompt: str
+    schema_prompt: str
     fields: list[str]
     auto_approve: bool = True
 
@@ -138,6 +151,7 @@ class Project(ProjectBase):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     prompt: Optional[str] = None
+    schema_prompt: Optional[str] = None
     fields: Optional[list[str]] = None
     auto_approve: Optional[bool] = None
 

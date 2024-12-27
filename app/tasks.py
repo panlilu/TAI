@@ -1,9 +1,10 @@
 import os
 import zipfile
+from datetime import datetime
 from rq import get_current_job
 from sqlalchemy.orm import Session
 from .database import SessionLocal
-from .models import Job, Article
+from .models import Job, Article, Project
 from .schemas import ArticleCreate, JobStatus
 
 ALLOWED_EXTENSIONS = {'.md', '.doc', '.pdf', '.txt', '.docx'}
@@ -72,11 +73,22 @@ def process_upload(job_id, file_path, project_id):
             if not check_job_status(db, job):
                 return
                 
+            # 获取project对应的article_type_id
+            project = db.query(Project).filter(Project.id == project_id).first()
+            if not project:
+                raise Exception(f"Project {project_id} not found")
+
             # 创建article
+            file_path = os.path.join(root, file)
             article_data = ArticleCreate(
                 name=file,
-                attachments=[os.path.join(root, file)],
-                article_type_id=1  # 这里需要根据实际情况设置article_type_id
+                attachments=[{
+                    "path": file_path,
+                    "is_active": True,  # 默认第一个附件为active
+                    "filename": file,
+                    "created_at": datetime.utcnow().isoformat()
+                }],
+                article_type_id=project.article_type_id
             )
             db_article = Article(
                 name=article_data.name,
