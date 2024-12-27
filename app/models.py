@@ -19,6 +19,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     
     article_types = relationship("ArticleType", back_populates="owner")
+    projects = relationship("Project", back_populates="owner")
 
 class ArticleType(Base):
     __tablename__ = "article_types"
@@ -43,6 +44,7 @@ class Article(Base):
     created_at = Column(DateTime, default=datetime.utcnow)  # 创建时间
     
     article_type = relationship("ArticleType", back_populates="articles")
+    project = relationship("Project", back_populates="articles")
     ai_reviews = relationship("AIReviewReport", back_populates="article")
 
 class AIReviewReport(Base):
@@ -56,3 +58,18 @@ class AIReviewReport(Base):
     is_active = Column(Boolean, default=False)  # 是否为当前激活的批阅报告
     
     article = relationship("Article", back_populates="ai_reviews")
+
+class Project(Base):
+    __tablename__ = "projects"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)  # 项目名称
+    prompt = Column(String)  # 审核用的prompt
+    fields = Column(JSON)  # 自定义结构化数据字段
+    auto_approve = Column(Boolean, default=True)  # 是否自动审批
+    owner_id = Column(Integer, ForeignKey("users.id"))  # 创建者ID
+    article_type_id = Column(Integer, ForeignKey("article_types.id"))  # 基于的文章类型ID
+    
+    owner = relationship("User", back_populates="projects")
+    article_type = relationship("ArticleType")
+    articles = relationship("Article", back_populates="project")
