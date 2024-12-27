@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, Enum, ForeignKey, JSON, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, Enum, ForeignKey, JSON, DateTime, Text
 from sqlalchemy.orm import relationship
 from .database import Base
 import enum
@@ -41,6 +41,7 @@ class Article(Base):
     name = Column(String, index=True)  # 文章名称
     attachments = Column(JSON)  # 附件列表
     article_type_id = Column(Integer, ForeignKey("article_types.id"))  # 文章类型ID
+    project_id = Column(Integer, ForeignKey("projects.id"))  # 项目ID
     created_at = Column(DateTime, default=datetime.utcnow)  # 创建时间
     
     article_type = relationship("ArticleType", back_populates="articles")
@@ -73,3 +74,17 @@ class Project(Base):
     owner = relationship("User", back_populates="projects")
     article_type = relationship("ArticleType")
     articles = relationship("Article", back_populates="project")
+
+class Job(Base):
+    __tablename__ = "jobs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    task = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    progress = Column(Integer, nullable=True)
+    logs = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    project = relationship("Project")

@@ -1,13 +1,21 @@
 from datetime import timedelta
-from typing import List
-from fastapi import Depends, FastAPI, HTTPException, status
+import os
+from typing import List, Optional
+from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File
+from fastapi.encoders import jsonable_encoder
+from datetime import datetime
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from redis import Redis
+from rq import Queue
 
-from . import models, schemas, auth
+from . import models, schemas, auth, tasks
 from .database import engine, get_db
 from .models import UserRole
+
+redis_conn = Redis()
+task_queue = Queue(connection=redis_conn)
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -262,6 +270,16 @@ async def delete_article(
     db.commit()
     return {"message": "Article deleted successfully"}
 
+@app.delete("/articles")
+async def delete_all_articles(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 删除所有文章
+    db.query(models.Article).delete()
+    db.commit()
+    return {"message": "All articles deleted successfully"}
+
 # AI批阅报告管理API
 @app.post("/ai-reviews", response_model=schemas.AIReviewReport)
 async def create_ai_review(
@@ -317,10 +335,31 @@ async def create_project(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    # 获取article_type信息
+    article_type = db.query(models.ArticleType).filter(models.ArticleType.id == project.article_type_id).first()
+    if not article_type:
+        raise HTTPException(status_code=404, detail="Article type not found")
+    
+    # 检查权限：article_type必须是public或者属于当前用户
+    if not article_type.is_public and article_type.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=403, 
+            detail="Not authorized to use this article type"
+        )
+
+    # 如果没有提供name，则使用article_type.name + 当前日期
+    if not project.name:
+        from datetime import datetime
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        project_name = f"{article_type.name}_{current_date}"
+    else:
+        project_name = project.name
+    
+    # 创建project，从article_type复制prompt和fields
     db_project = models.Project(
-        name=project.name,
-        prompt=project.prompt,
-        fields=project.fields,
+        name=project_name,
+        prompt=article_type.prompt,
+        fields=article_type.fields,
         auto_approve=project.auto_approve,
         owner_id=current_user.id,
         article_type_id=project.article_type_id
@@ -396,3 +435,201 @@ async def delete_project(
     db.delete(db_project)
     db.commit()
     return {"message": "Project deleted successfully"}
+
+# Job相关API
+@app.post("/jobs", response_model=schemas.Job)
+async def create_job(
+    project_id: int,
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 检查项目是否属于当前用户
+    project = db.query(models.Project).filter(
+        models.Project.id == project_id,
+        models.Project.owner_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found or not authorized")
+    
+    # 确保uploads目录存在
+    os.makedirs("uploads", exist_ok=True)
+    
+    # 保存上传文件
+    file_path = f"uploads/{file.filename}"
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
+    
+    # 创建job记录
+    db_job = models.Job(
+        project_id=project_id,
+        task="process_upload",
+        status=schemas.JobStatus.PENDING,
+        progress=0,
+        logs=""
+    )
+    db.add(db_job)
+    db.commit()
+    db.refresh(db_job)
+    
+    # 将任务加入队列
+    task_queue.enqueue(
+        tasks.process_upload,
+        args=(str(db_job.id), file_path, project_id)  # 使用位置参数确保正确的参数顺序
+    )
+    
+    return db_job
+
+@app.get("/jobs", response_model=List[schemas.Job])
+async def get_jobs(
+    project_id: Optional[int] = None,
+    skip: int = 0,
+    limit: int = 100,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 基础查询：获取与用户相关的所有项目的任务
+    query = db.query(models.Job).join(
+        models.Project,
+        models.Job.project_id == models.Project.id
+    ).filter(
+        models.Project.owner_id == current_user.id
+    )
+    
+    # 如果提供了project_id，添加项目过滤条件
+    if project_id is not None:
+        # 检查项目是否存在且属于当前用户
+        project = db.query(models.Project).filter(
+            models.Project.id == project_id,
+            models.Project.owner_id == current_user.id
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found or not authorized")
+        query = query.filter(models.Job.project_id == project_id)
+    
+    # 执行查询
+    jobs = query.offset(skip).limit(limit).all()
+    return jobs
+
+@app.get("/jobs/{job_id}", response_model=schemas.Job)
+async def get_job(
+    job_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # 检查项目是否属于当前用户
+    project = db.query(models.Project).filter(
+        models.Project.id == job.project_id,
+        models.Project.owner_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized to access this job")
+    
+    return job
+
+@app.post("/jobs/{job_id}/action", response_model=schemas.Job)
+async def job_action(
+    job_id: int,
+    action: schemas.JobAction,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # 检查项目是否属于当前用户
+    project = db.query(models.Project).filter(
+        models.Project.id == job.project_id,
+        models.Project.owner_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized to perform action on this job")
+    
+    # 处理不同的操作
+    if action.action == schemas.JobAction.PAUSE:
+        if job.status != schemas.JobStatus.PROCESSING:
+            raise HTTPException(status_code=400, detail="Can only pause processing jobs")
+        job.status = schemas.JobStatus.PAUSED
+    
+    elif action.action == schemas.JobAction.RESUME:
+        if job.status != schemas.JobStatus.PAUSED:
+            raise HTTPException(status_code=400, detail="Can only resume paused jobs")
+        job.status = schemas.JobStatus.PROCESSING
+        # 重新加入队列
+        task_queue.enqueue(
+            tasks.process_upload,
+            args=(str(job.id), f"uploads/{job.id}", job.project_id)  # 使用位置参数确保正确的参数顺序
+        )
+    
+    elif action.action == schemas.JobAction.CANCEL:
+        if job.status in [schemas.JobStatus.COMPLETED, schemas.JobStatus.FAILED, schemas.JobStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail="Cannot cancel completed, failed or cancelled jobs")
+        job.status = schemas.JobStatus.CANCELLED
+    
+    db.commit()
+    db.refresh(job)
+    return job
+
+@app.post("/jobs/cancel-all")
+async def cancel_all_jobs(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 获取用户所有项目中的进行中任务
+    active_jobs = db.query(models.Job).join(
+        models.Project,
+        models.Job.project_id == models.Project.id
+    ).filter(
+        models.Project.owner_id == current_user.id,
+        models.Job.status.in_([
+            schemas.JobStatus.PENDING,
+            schemas.JobStatus.PROCESSING,
+            schemas.JobStatus.PAUSED
+        ])
+    ).all()
+    
+    # 更新所有任务状态为已取消
+    for job in active_jobs:
+        job.status = schemas.JobStatus.CANCELLED
+    
+    db.commit()
+    
+    return {
+        "message": f"Successfully cancelled {len(active_jobs)} jobs",
+        "cancelled_jobs": len(active_jobs)
+    }
+
+@app.put("/jobs/{job_id}", response_model=schemas.Job)
+async def update_job(
+    job_id: int,
+    job_update: schemas.JobUpdate,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # 检查项目是否属于当前用户
+    project = db.query(models.Project).filter(
+        models.Project.id == job.project_id,
+        models.Project.owner_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized to update this job")
+    
+    if job_update.status is not None:
+        job.status = job_update.status
+    if job_update.progress is not None:
+        job.progress = job_update.progress
+    if job_update.logs is not None:
+        job.logs = job_update.logs
+    
+    db.commit()
+    db.refresh(job)
+    return job
