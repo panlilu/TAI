@@ -158,8 +158,9 @@ const UserManagement = () => {
               rules={[{ required: true, message: '请选择角色' }]}
             >
               <Select>
-                <Select.Option value="ADMIN">管理员</Select.Option>
-                <Select.Option value="NORMAL">普通用户</Select.Option>
+                <Select.Option value="admin">管理员</Select.Option>
+                <Select.Option value="normal">普通用户</Select.Option>
+                <Select.Option value="vip">VIP用户</Select.Option>
               </Select>
             </Form.Item>
           )}
