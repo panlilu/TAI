@@ -10,6 +10,8 @@ import Dashboard from './pages/dashboard';
 import UserManagement from './pages/user';
 import ArticleType from './pages/article-type';
 import Jobs from './pages/jobs';
+import ProjectList from './pages/project';
+import ProjectDetail from './pages/project/detail';
 import AuthRoute from './components/AuthRoute';
 
 import './App.css';
@@ -62,6 +64,28 @@ function App() {
               <AuthRoute>
                 <MainLayout>
                   <Jobs />
+                </MainLayout>
+              </AuthRoute>
+            }
+          />
+
+          <Route
+            path="/project"
+            element={
+              <AuthRoute>
+                <MainLayout>
+                  <ProjectList />
+                </MainLayout>
+              </AuthRoute>
+            }
+          />
+
+          <Route
+            path="/project/:id"
+            element={
+              <AuthRoute>
+                <MainLayout>
+                  <ProjectDetail />
                 </MainLayout>
               </AuthRoute>
             }

@@ -234,10 +234,19 @@ async def create_article(
 async def get_articles(
     skip: int = 0,
     limit: int = 100,
+    project_id: Optional[int] = None,
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    articles = db.query(models.Article).offset(skip).limit(limit).all()
+    if project_id:
+        project = db.query(models.Project).filter(models.Project.id == project_id).first()
+        if project.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this project")
+        articles = db.query(models.Article).filter(
+            models.Article.project_id == project_id
+        ).offset(skip).limit(limit).all()
+    else:
+        articles = db.query(models.Article).offset(skip).limit(limit).all()
     return articles
 
 @api_app.get("/articles/{article_id}", response_model=schemas.Article)

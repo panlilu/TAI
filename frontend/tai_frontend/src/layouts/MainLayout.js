@@ -7,6 +7,7 @@ import {
   MenuUnfoldOutlined,
   FileTextOutlined,
   ScheduleOutlined,
+  ProjectOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -24,23 +25,28 @@ const MainLayout = ({ children }) => {
       icon: <DashboardOutlined />,
       label: '仪表盘',
     },
+    {
+      key: '/project',
+      icon: <ProjectOutlined />,
+      label: '项目管理',
+    },
+    {
+      key: '/article-type',
+      icon: <FileTextOutlined />,
+      label: '文章类型',
+    },
+    {
+      key: '/jobs',
+      icon: <ScheduleOutlined />,
+      label: '任务管理',
+    },
     ...(userRole === 'admin' ? [
       {
         key: '/user',
         icon: <UserOutlined />,
         label: '用户管理',
-      },
-      {
-        key: '/article-type',
-        icon: <FileTextOutlined />,
-        label: '文章类型',
       }
-    ] : []),
-    {
-      key: '/jobs',
-      icon: <ScheduleOutlined />,
-      label: '任务管理',
-    }
+    ] : [])
   ];
 
   return (
