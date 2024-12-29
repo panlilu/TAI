@@ -54,6 +54,7 @@ class AIReviewReport(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     article_id = Column(Integer, ForeignKey("articles.id"))  # 关联的文章ID
+    job_id = Column(Integer, ForeignKey("jobs.id"))  # 关联的任务ID
     source_data = Column(String)  # 源数据
     structured_data = Column(JSON)  # 结构化数据
     processed_attachment_text = Column(Text)  # 处理后的附件文本内容

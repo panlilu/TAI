@@ -109,13 +109,20 @@ def process_ai_review(article_id: int, job_id: int):
         if not project:
             raise Exception("Error: Project not found")
             
-        # 创建AI审阅报告
-        ai_review = AIReviewReport(
-            article_id=article_id,
-            is_active=True
-        )
-        db.add(ai_review)
-        db.commit()
+        # 查找是否已存在相同job的AI审阅报告
+        ai_review = db.query(AIReviewReport).filter(
+            AIReviewReport.job_id == job_id
+        ).first()
+        
+        # 如果不存在，则创建新的
+        if not ai_review:
+            ai_review = AIReviewReport(
+                article_id=article_id,
+                job_id=job_id,
+                is_active=True
+            )
+            db.add(ai_review)
+            db.commit()
         
         # 处理激活的附件
         processed_text = ""

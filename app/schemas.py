@@ -117,6 +117,7 @@ class AIReviewReport(AIReviewReportBase):
     article_id: int
     created_at: datetime
     is_active: bool
+    job_id: int | None
 
     model_config = {
         "from_attributes": True
