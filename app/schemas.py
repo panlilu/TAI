@@ -198,5 +198,5 @@ class JobUpdate(BaseModel):
     progress: Optional[int] = None
     logs: Optional[str] = None
 
-class JobAction(BaseModel):
+class JobActionRequest(BaseModel):
     action: JobAction
