@@ -113,6 +113,7 @@ const Jobs = () => {
     },
     {
       title: '操作',
+      fixed: 'right',
       key: 'action',
       render: (_, record) => (
         <Space>
@@ -163,6 +164,7 @@ const Jobs = () => {
         columns={columns}
         dataSource={data}
         rowKey="id"
+        scroll={{ x: 'max-content' }}
         loading={loading}
       />
     </div>

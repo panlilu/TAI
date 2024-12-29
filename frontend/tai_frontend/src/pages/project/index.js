@@ -89,6 +89,7 @@ const ProjectList = () => {
     },
     {
       title: '操作',
+      fixed: 'right',
       key: 'action',
       render: (_, record) => (
         <Button type="link" danger onClick={() => handleDelete(record.id)}>
@@ -99,7 +100,7 @@ const ProjectList = () => {
   ];
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div>
       <div style={{ marginBottom: '16px' }}>
         <Button type="primary" onClick={() => setIsModalVisible(true)}>
           新建项目
@@ -109,6 +110,7 @@ const ProjectList = () => {
       <Table
         columns={columns}
         dataSource={projects}
+        scroll={{ x: 'max-content' }}
         rowKey="id"
       />
 

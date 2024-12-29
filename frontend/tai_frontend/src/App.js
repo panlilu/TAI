@@ -92,7 +92,8 @@ function App() {
           />
 
           {/* 重定向到仪表盘 */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          {/* <Route path="/" element={<Navigate to="/dashboard" replace />} /> */}
+          <Route path="/" element={<Navigate to="/projects" replace />} />
         </Routes>
       </Router>
     </ConfigProvider>

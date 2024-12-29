@@ -82,6 +82,7 @@ const ArticleType = () => {
     },
     {
       title: '操作',
+      fixed: 'right',
       key: 'action',
       render: (_, record) => (
         <>
@@ -119,6 +120,7 @@ const ArticleType = () => {
         columns={columns}
         dataSource={data}
         rowKey="id"
+        scroll={{ x: 'max-content' }}
         loading={loading}
       />
       <Modal

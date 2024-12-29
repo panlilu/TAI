@@ -20,11 +20,11 @@ const MainLayout = ({ children }) => {
   const userRole = localStorage.getItem('userRole');
 
   const menuItems = [
-    {
-      key: '/dashboard',
-      icon: <DashboardOutlined />,
-      label: '仪表盘',
-    },
+    // {
+    //   key: '/dashboard',
+    //   icon: <DashboardOutlined />,
+    //   label: '仪表盘',
+    // },
     {
       key: '/project',
       icon: <ProjectOutlined />,

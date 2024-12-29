@@ -83,6 +83,7 @@ const UserManagement = () => {
     {
       title: '操作',
       key: 'action',
+      fixed: 'right',
       render: (_, record) => (
         <div>
           <Button
@@ -118,6 +119,7 @@ const UserManagement = () => {
         columns={columns}
         dataSource={users}
         rowKey="id"
+        scroll={{ x: 'max-content' }}
         loading={loading}
       />
       <Modal
