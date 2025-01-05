@@ -86,14 +86,14 @@ function App() {
               <AuthRoute>
                 <MainLayout>
                   <ProjectDetail />
-                </MainLayout>
+                </MainLayout>ß
               </AuthRoute>
             }
           />
 
           {/* 重定向到仪表盘 */}
           {/* <Route path="/" element={<Navigate to="/dashboard" replace />} /> */}
-          <Route path="/" element={<Navigate to="/projects" replace />} />
+          <Route path="/" element={<Navigate to="/project" replace />} />
         </Routes>
       </Router>
     </ConfigProvider>
