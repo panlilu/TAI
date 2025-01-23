@@ -25,6 +25,11 @@ const MainLayout = ({ children }) => {
     //   label: '仪表盘',
     // },
     {
+      key: '/review-wizard',
+      icon: <ProjectOutlined />,
+      label: '审阅向导',
+    },
+    {
       key: '/project',
       icon: <ProjectOutlined />,
       label: '项目管理',

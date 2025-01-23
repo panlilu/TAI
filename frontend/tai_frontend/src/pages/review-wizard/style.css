@@ -1,0 +1,29 @@
+.review-wizard-container {
+  max-width: 800px;
+  margin: 40px auto;
+  padding: 24px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.steps-content {
+  margin: 40px 0;
+  min-height: 200px;
+}
+
+.steps-action {
+  text-align: right;
+}
+
+.ant-steps {
+  margin-bottom: 40px;
+}
+
+.ant-form-item {
+  margin-bottom: 24px;
+}
+
+.ant-upload {
+  width: 100%;
+}

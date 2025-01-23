@@ -12,6 +12,7 @@ import ArticleType from './pages/article-type';
 import Jobs from './pages/jobs';
 import ProjectList from './pages/project';
 import ProjectDetail from './pages/project/detail';
+import ReviewWizard from './pages/review-wizard';
 import AuthRoute from './components/AuthRoute';
 
 import './App.css';
@@ -93,6 +94,17 @@ function App() {
 
           {/* 重定向到仪表盘 */}
           {/* <Route path="/" element={<Navigate to="/dashboard" replace />} /> */}
+          <Route
+            path="/review-wizard"
+            element={
+              <AuthRoute>
+                <MainLayout>
+                  <ReviewWizard />
+                </MainLayout>
+              </AuthRoute>
+            }
+          />
+
           <Route path="/" element={<Navigate to="/project" replace />} />
         </Routes>
       </Router>
