@@ -6,6 +6,7 @@ import zhCN from 'antd/locale/zh_CN';
 import MainLayout from './layouts/MainLayout';
 import LoginPage from './pages/login';
 import RegisterPage from './pages/register';
+import HomePage from './pages/home';
 import Dashboard from './pages/dashboard';
 import UserManagement from './pages/user';
 import ArticleType from './pages/article-type';
@@ -105,7 +106,7 @@ function App() {
             }
           />
 
-          <Route path="/" element={<Navigate to="/project" replace />} />
+          <Route path="/" element={<HomePage />} />
         </Routes>
       </Router>
     </ConfigProvider>
