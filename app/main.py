@@ -3,6 +3,8 @@ import os
 from typing import List, Optional
 from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File, APIRouter
 from fastapi.encoders import jsonable_encoder
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from datetime import datetime
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +34,14 @@ api_app = FastAPI(
 
 # 将API子应用挂载到/api路径
 app.mount("/api", api_app)
+
+# 配置静态文件服务
+app.mount("/static", StaticFiles(directory="frontend/tai_frontend/build/static"), name="static")
+
+# 处理前端路由请求
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+    return FileResponse("frontend/tai_frontend/build/index.html")
 
 # 添加CORS中间件到API子应用
 api_app.add_middleware(
