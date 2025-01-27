@@ -228,7 +228,7 @@ def process_upload(job_id, file_path, project_id):
             raise Exception(f"Error: Project {project_id} not found")
             
         # 使用与上传相同的目录结构
-        extract_dir = f"uploads/{project.owner_id}/{job_id}"
+        extract_dir = f"data/uploads/{project.owner_id}/{job_id}"
         os.makedirs(extract_dir, exist_ok=True)
         
         # 检查任务状态

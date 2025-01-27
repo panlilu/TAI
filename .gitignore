@@ -5,3 +5,5 @@ prompt.txt
 sql_app.db
 uploads
 dump.rdb
+data
+data/*

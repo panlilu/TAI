@@ -534,7 +534,7 @@ async def create_job(
     db.refresh(db_job)
     
     # 创建按用户ID和任务ID组织的目录结构
-    upload_dir = f"uploads/{current_user.id}/{db_job.id}"
+    upload_dir = f"data/uploads/{current_user.id}/{db_job.id}"
     os.makedirs(upload_dir, exist_ok=True)
     
     # 保存上传文件

@@ -24,11 +24,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY run.py ./
 
+# 创建上传目录
+RUN mkdir -p /app/data
+
 # 从前端构建阶段复制产物
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+COPY --from=frontend-builder /app/frontend/build ./frontend/tai_frontend/build
 
 # 暴露端口
 EXPOSE 8000
 
 # 启动命令
-CMD ["uvicorn", "run:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
