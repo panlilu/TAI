@@ -25,6 +25,16 @@ const updateProject = async (id, data) => {
   return await request.put(`/projects/${id}`, data);
 }
 
+const uploadFile = async (projectId, file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return await request.post(`/jobs?project_id=${projectId}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+}
+
 const ReviewWizard = () => {
   const [current, setCurrent] = useState(0);
   const [form] = Form.useForm();
@@ -67,7 +77,7 @@ const ReviewWizard = () => {
       };
       fetchProject();
     }
-  }, [current, projectId]);
+  }, [current, projectId, form]);
 
   const steps = [
     {
@@ -129,10 +139,15 @@ const ReviewWizard = () => {
           name="file"
           label="上传文件"
           valuePropName="fileList"
+          getValueFromEvent={(e) => e.fileList}
           rules={[{ required: true, message: '请上传文件' }]}
         >
-          <Upload beforeUpload={() => false}>
-            <Button icon={<UploadOutlined />}>选择文件</Button>
+          <Upload
+            beforeUpload={() => false}
+            multiple
+            accept=".doc,.docx,.pdf"
+          >
+            <Button icon={<UploadOutlined />}>选择文件（支持多选）</Button>
           </Upload>
         </Form.Item>
       ),
@@ -170,6 +185,11 @@ const ReviewWizard = () => {
         });
       }
       
+      // 如果是第三步,上传文件
+      if (current === 2) {
+        const { file } = values;
+        await uploadFile(projectId, file[0].originFileObj);
+      }
       setCurrent(current + 1);
     } catch (error) {
       console.log(error);
