@@ -4,13 +4,15 @@ from typing import List, Optional
 from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File, APIRouter
 from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from datetime import datetime
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from redis import Redis
 from rq import Queue
+import asyncio
+import json
 
 from . import models, schemas, auth, tasks
 from .database import engine, get_db
@@ -733,3 +735,45 @@ async def update_job(
     db.commit()
     db.refresh(job)
     return job
+
+@api_app.get("/events")
+async def job_events(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    async def event_generator():
+        heartbeat_interval = 30  # 30秒发送一次心跳
+        last_heartbeat = 0
+
+        while True:
+            current_time = datetime.utcnow().timestamp()
+
+            # 检查是否需要发送心跳
+            if current_time - last_heartbeat >= heartbeat_interval:
+                yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                last_heartbeat = current_time
+
+            # 查询最近10秒内更新的任务
+            recent_jobs = db.query(models.Job).join(
+                models.Project
+            ).filter(
+                models.Project.owner_id == current_user.id,
+                models.Job.updated_at >= datetime.utcnow() - timedelta(seconds=10)
+            ).all()
+
+            if recent_jobs:
+                for job in recent_jobs:
+                    data = {
+                        "id": job.id,
+                        "status": job.status,
+                        "progress": job.progress,
+                        "task": job.task
+                    }
+                    yield f"data: {json.dumps(data)}\n\n"
+            
+            await asyncio.sleep(2)  # Poll every 2 seconds
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream"
+    )

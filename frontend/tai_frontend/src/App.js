@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 // import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
@@ -16,10 +16,25 @@ import ProjectList from './pages/project';
 import ProjectDetail from './pages/project/detail';
 import ReviewWizard from './pages/review-wizard';
 import AuthRoute from './components/AuthRoute';
+import { eventService } from './utils/eventService';
+import { getToken } from './utils/auth';
 
 import './App.css';
 
 function App() {
+  useEffect(() => {
+    const token = getToken();
+    if (token) {
+      // Start listening for job events
+      eventService.connect();
+    }
+    
+    return () => {
+      // Cleanup SSE connection when component unmounts
+      eventService.disconnect();
+    };
+  }, []);
+
   return (
     <ConfigProvider locale={zhCN}>
       <Router>
