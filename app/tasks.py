@@ -208,16 +208,20 @@ def check_job_status(db: Session, job: Job) -> bool:
     return True
 
 def process_upload(job_id, file_path, project_id):
+    print(f"Starting process_upload with job_id: {job_id}, file_path: {file_path}, project_id: {project_id}")
     db = SessionLocal()
     try:
         job = db.query(Job).filter(Job.id == int(job_id)).first()
         if not job:
+            print(f"Job {job_id} not found")
             return
         
         # 如果任务已经完成、失败或取消，直接返回
         if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+            print(f"Job {job_id} is already in status: {job.status}")
             return
         
+        print(f"Processing job {job_id}, updating status to PROCESSING")
         # 更新任务状态为处理中
         job.status = JobStatus.PROCESSING
         db.commit()
@@ -255,8 +259,10 @@ def process_upload(job_id, file_path, project_id):
                 if is_allowed_file(file):
                     all_files.append((root, file))
         
+        print(f"Found {len(all_files)} files to process")
         total_files = len(all_files)
         for index, (root, file) in enumerate(all_files):
+            print(f"Processing file {index + 1}/{total_files}: {file}")
             # 检查任务状态
             if not check_job_status(db, job):
                 return
@@ -295,12 +301,14 @@ def process_upload(job_id, file_path, project_id):
         if not check_job_status(db, job):
             return
             
+        print(f"Job {job_id} completed successfully")
         # 更新任务状态为完成
         job.status = JobStatus.COMPLETED
         job.progress = 100
         db.commit()
         
     except Exception as e:
+        print(f"Error occurred in job {job_id}: {str(e)}")
         # 更新任务状态为失败
         error_msg = f"Error: File processing failed: {str(e)}"
         job.status = JobStatus.FAILED

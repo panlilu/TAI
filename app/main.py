@@ -351,7 +351,7 @@ async def delete_all_articles(
     db.commit()
     return {"message": "All articles deleted successfully"}
 
-@api_app.get("/articles/{article_id}/content", response_model=schemas.ArticleContentResponse, tags=["Article Management"])
+@api_app.get("/articles/{article_id}/content", response_model=None, tags=["Article Management"])
 async def get_article_content(
     article_id: int,
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -370,29 +370,35 @@ async def get_article_content(
     file_path = active_attachment['path']
     filename = active_attachment['filename']
     
-    # Detect mime type
+    # 检查文件是否存在
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # 检测文件类型
     mime_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+    
+    # 如果是文本文件，直接读取内容
     is_text = mime_type.startswith('text/') or filename.endswith(('.md', '.txt'))
     
     try:
         if is_text:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-                is_base64 = False
+                return {
+                    "content": content,
+                    "filename": filename,
+                    "path": file_path,
+                    "content_type": mime_type,
+                }
         else:
-            with open(file_path, 'rb') as f:
-                content = base64.b64encode(f.read()).decode('utf-8')
-                is_base64 = True
+            # 对于二进制文件，使用 FileResponse
+            return FileResponse(
+                path=file_path,
+                filename=filename,
+                media_type=mime_type
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
-        
-    return {
-        "content": content,
-        "filename": filename,
-        "path": file_path,
-        "content_type": mime_type,
-        "is_base64": is_base64
-    }
 
 # AI批阅报告管理API
 @api_app.post("/ai-reviews", response_model=schemas.AIReviewReport, tags=["AI Review Management"])

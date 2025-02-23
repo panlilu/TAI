@@ -11,6 +11,7 @@ const ArticleViewer = () => {
   const { projectId, articleId } = useParams();
   const [article, setArticle] = useState(null);
   const [content, setContent] = useState(null);
+  const [pdfUrl, setPdfUrl] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -18,43 +19,65 @@ const ArticleViewer = () => {
       try {
         const response = await request(`/articles/${articleId}`);
         setArticle(response);
-        // 获取文章内容
-        const contentResponse = await request(`/articles/${articleId}/content`);
-        setContent(contentResponse);
+        
+        if (response.name.toLowerCase().endsWith('.pdf')) {
+          // For PDF files, fetch as blob
+          const pdfResponse = await fetch(`${config.apiBaseURL}/articles/${articleId}/content`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            },
+          });
+          const blob = await pdfResponse.blob();
+          const url = URL.createObjectURL(blob);
+          setPdfUrl(url);
+        } else {
+          // For other file types, fetch as before
+          const contentResponse = await request(`/articles/${articleId}/content`);
+          setContent(contentResponse);
+        }
       } catch (error) {
         message.error('获取文章详情失败');
       }
     };
 
     fetchArticle();
+
+    // Cleanup function to revoke blob URL
+    return () => {
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl);
+      }
+    };
   }, [articleId]);
 
   const renderContent = () => {
-    if (!article || !content) return null;
+    if (!article) return null;
 
     const fileExtension = article.name.split('.').pop().toLowerCase();
 
     switch (fileExtension) {
       case 'pdf':
-        return (
+        return pdfUrl ? (
           <iframe
-            src={`${config.apiBaseURL}/articles/${articleId}/content`}
+            src={pdfUrl}
             style={{ width: '100%', height: '800px', border: 'none' }}
             title="PDF Viewer"
           />
+        ) : (
+          <div>加载中...</div>
         );
       case 'md':
-        return (
+        return content ? (
           <div className="markdown-body" style={{ padding: '20px' }}>
             <ReactMarkdown>{content}</ReactMarkdown>
           </div>
-        );
+        ) : null;
       case 'txt':
-        return (
+        return content ? (
           <pre style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
             {content}
           </pre>
-        );
+        ) : null;
       default:
         return <p>不支持的文件格式</p>;
     }

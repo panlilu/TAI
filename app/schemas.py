@@ -96,13 +96,6 @@ class ArticleUpdate(BaseModel):
 class AttachmentUpdate(BaseModel):
     is_active: bool
 
-class ArticleContentResponse(BaseModel):
-    content: str
-    filename: str
-    path: str
-    content_type: str  # mime type of the file
-    is_base64: bool  # whether the content is base64 encoded
-
 # AI批阅报告相关模型
 class AIReviewReportBase(BaseModel):
     source_data: str
