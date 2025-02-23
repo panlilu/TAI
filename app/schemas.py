@@ -2,7 +2,11 @@ from datetime import datetime
 from pydantic import BaseModel, computed_field, field_serializer, model_serializer
 from typing import Optional, Literal
 from enum import Enum
-from .models import UserRole
+
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    VIP = "vip"
+    NORMAL = "normal"
 
 class JobStatus(str, Enum):
     PENDING = "pending"
@@ -17,6 +21,12 @@ class JobAction(str, Enum):
     RESUME = "resume"
     CANCEL = "cancel"
     RETRY = "retry"
+
+class JobTaskType(str, Enum):
+    PROCESS_UPLOAD = "process_upload"
+    CONVERT_TO_MARKDOWN = "convert_to_markdown"
+    PROCESS_WITH_LLM = "process_with_llm"
+    PROCESS_AI_REVIEW = "process_ai_review"
 
 class UserBase(BaseModel):
     username: str
@@ -98,12 +108,8 @@ class AttachmentUpdate(BaseModel):
 
 # AI批阅报告相关模型
 class AIReviewReportBase(BaseModel):
-    source_data: str
-    structured_data: dict | None = None
-
-    @field_serializer('structured_data')
-    def serialize_structured_data(self, data: dict | None) -> dict:
-        return data if data is not None else {}
+    source_data: str | None = None
+    processed_attachment_text: str | None = None
 
 class AIReviewReportCreate(AIReviewReportBase):
     article_id: int
@@ -123,9 +129,12 @@ class AIReviewReport(AIReviewReportBase):
     def serialize_datetime(self, dt: datetime) -> str:
         return dt.isoformat() if dt else None
 
+    @field_serializer('source_data')
+    def serialize_source_data(self, data: str) -> str:
+        return data if data is not None else ""
+
 class AIReviewReportUpdate(BaseModel):
     source_data: Optional[str] = None
-    structured_data: Optional[dict] = None
     is_active: Optional[bool] = None
 
 # 项目相关模型
@@ -160,14 +169,16 @@ class JobBase(BaseModel):
     progress: Optional[int] = None
     logs: Optional[str] = None
 
-class JobCreate(JobBase):
-    project_id: int
+class JobCreate(BaseModel):
+    project_id: Optional[int] = None
+    task: JobTaskType
+    article_id: Optional[int] = None
 
 class Job(JobBase):
     id: int
     project_id: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     model_config = {
         "from_attributes": True

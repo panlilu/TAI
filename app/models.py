@@ -1,13 +1,9 @@
-from sqlalchemy import Boolean, Column, Integer, String, Enum, ForeignKey, JSON, DateTime, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Enum as SQLAlchemyEnum, Boolean, Text
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import JSONB, JSON
 from .database import Base
-import enum
-from datetime import datetime
-
-class UserRole(str, enum.Enum):
-    ADMIN = "admin"
-    VIP = "vip"
-    NORMAL = "normal"
+from .schemas import UserRole, JobStatus, JobTaskType
 
 class User(Base):
     __tablename__ = "users"
@@ -15,7 +11,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-    role = Column(Enum(UserRole), default=UserRole.NORMAL)
+    role = Column(SQLAlchemyEnum(UserRole), default=UserRole.NORMAL)
     is_active = Column(Boolean, default=True)
     
     article_types = relationship("ArticleType", back_populates="owner")
@@ -41,7 +37,7 @@ class Article(Base):
     attachments = Column(JSON)  # 附件列表
     article_type_id = Column(Integer, ForeignKey("article_types.id"))  # 文章类型ID
     project_id = Column(Integer, ForeignKey("projects.id"))  # 项目ID
-    created_at = Column(DateTime, default=datetime.utcnow)  # 创建时间
+    created_at = Column(DateTime(timezone=True), server_default=func.now())  # 创建时间
     
     article_type = relationship("ArticleType", back_populates="articles")
     project = relationship("Project", back_populates="articles")
@@ -54,9 +50,8 @@ class AIReviewReport(Base):
     article_id = Column(Integer, ForeignKey("articles.id"))  # 关联的文章ID
     job_id = Column(Integer, ForeignKey("jobs.id"))  # 关联的任务ID
     source_data = Column(String)  # 源数据
-    structured_data = Column(JSON)  # 结构化数据
     processed_attachment_text = Column(Text)  # 处理后的附件文本内容
-    created_at = Column(DateTime, default=datetime.utcnow)  # 创建时间
+    created_at = Column(DateTime(timezone=True), server_default=func.now())  # 创建时间
     is_active = Column(Boolean, default=False)  # 是否为当前激活的批阅报告
     
     article = relationship("Article", back_populates="ai_reviews")
@@ -74,17 +69,18 @@ class Project(Base):
     owner = relationship("User", back_populates="projects")
     article_type = relationship("ArticleType")
     articles = relationship("Article", back_populates="project")
+    jobs = relationship("Job", back_populates="project")
 
 class Job(Base):
     __tablename__ = "jobs"
     
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    task = Column(String, nullable=False)
-    status = Column(String, nullable=False)
+    task = Column(SQLAlchemyEnum(JobTaskType), nullable=False)
+    status = Column(SQLAlchemyEnum(JobStatus), nullable=False)
     progress = Column(Integer, nullable=True)
     logs = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
-    project = relationship("Project")
+    project = relationship("Project", back_populates="jobs")

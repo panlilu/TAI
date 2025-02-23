@@ -12,6 +12,8 @@ from PyPDF2 import PdfReader
 from PIL import Image
 import pytesseract
 from litellm import completion
+import json
+from .file_converter import convert_file_to_markdown
 
 ALLOWED_EXTENSIONS = {'.md', '.doc', '.pdf', '.txt', '.docx'}
 ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp'}
@@ -43,11 +45,11 @@ def extract_text_from_image(file_path: str) -> str:
     except Exception as e:
         return f"Error: Failed to extract text from image: {str(e)}"
 
-def analyze_with_openai(prompt: str, text: str, require_json: bool = False) -> str:
+def analyze_with_openai(prompt: str, text: str, require_json: bool = False, model_name: str = None) -> str:
     """使用LiteLLM分析文本"""
     try:
-        # 从环境变量获取模型配置
-        model = os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
+        # 使用指定的模型或默认模型
+        model = model_name or os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
         
         # 如果需要JSON响应，添加格式要求
         if require_json:
@@ -72,7 +74,6 @@ def analyze_with_openai(prompt: str, text: str, require_json: bool = False) -> s
     except Exception as e:
         error_msg = f"Error: Failed to analyze text with LLM: {str(e)}"
         try:
-            # 尝试获取当前任务并记录错误
             db = SessionLocal()
             current_job = get_current_job()
             if current_job and current_job.id:
@@ -83,11 +84,75 @@ def analyze_with_openai(prompt: str, text: str, require_json: bool = False) -> s
         except Exception:
             pass
         finally:
-            db.close()
+            if 'db' in locals():
+                db.close()
         return error_msg
 
-def process_ai_review(article_id: int, job_id: int):
-    """处理AI审阅任务"""
+def convert_to_markdown(article_id: int, job_id: int):
+    """将文章附件转换为Markdown格式"""
+    db = SessionLocal()
+    try:
+        # 获取任务信息
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            return
+            
+        # 更新任务状态为处理中
+        job.status = JobStatus.PROCESSING
+        db.commit()
+        
+        # 获取文章信息
+        article = db.query(Article).filter(Article.id == article_id).first()
+        if not article:
+            raise Exception(f"Error: Article {article_id} not found")
+        
+        # 处理激活的附件
+        active_attachment = None
+        for attachment in article.attachments:
+            if attachment.get("is_active"):
+                active_attachment = attachment
+                break
+                
+        if not active_attachment:
+            raise Exception("No active attachment found")
+        
+        # 转换文件
+        file_path = active_attachment["path"]
+        markdown_text = convert_file_to_markdown(file_path)
+        
+        # 更新文章的processed_text
+        ai_review = db.query(AIReviewReport).filter(
+            AIReviewReport.article_id == article_id,
+            # AIReviewReport.job_id == job_id
+        ).first()
+        
+        if not ai_review:
+            ai_review = AIReviewReport(
+                article_id=article_id,
+                job_id=job_id,
+                is_active=True
+            )
+            db.add(ai_review)
+            
+        ai_review.processed_attachment_text = markdown_text
+        db.commit()
+        
+        # 更新任务状态为完成
+        job.status = JobStatus.COMPLETED
+        job.progress = 100
+        db.commit()
+        
+    except Exception as e:
+        error_msg = f"Error: Markdown conversion failed: {str(e)}"
+        job.status = JobStatus.FAILED
+        job.logs = error_msg if not job.logs else f"{job.logs}\n{error_msg}"
+        db.commit()
+        raise
+    finally:
+        db.close()
+
+def process_with_llm(article_id: int, job_id: int, model_name: str = None):
+    """使用LLM处理文章内容"""
     db = SessionLocal()
     try:
         # 获取任务信息
@@ -109,92 +174,147 @@ def process_ai_review(article_id: int, job_id: int):
         if not project:
             raise Exception("Error: Project not found")
             
-        # 查找是否已存在相同job的AI审阅报告
+        # 获取AI审阅报告
         ai_review = db.query(AIReviewReport).filter(
+            AIReviewReport.article_id == article_id,
             AIReviewReport.job_id == job_id
         ).first()
         
-        # 如果不存在，则创建新的
-        if not ai_review:
-            ai_review = AIReviewReport(
-                article_id=article_id,
-                job_id=job_id,
-                is_active=True
-            )
-            db.add(ai_review)
-            db.commit()
+        if not ai_review or not ai_review.processed_attachment_text:
+            raise Exception("No processed text found. Please run convert_to_markdown first.")
         
-        # 处理激活的附件
-        processed_text = ""
-        active_attachment = None
-        for attachment in article.attachments:
-            if attachment.get("is_active"):
-                active_attachment = attachment
-                break
-                
-        if active_attachment:
-            file_path = active_attachment["path"]
-            file_ext = os.path.splitext(file_path)[1].lower()
-            
-            # 根据文件类型处理
-            if file_ext in ['.txt', '.md']:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    processed_text = f.read()
-            elif file_ext == '.docx':
-                processed_text = extract_text_from_docx(file_path)
-            elif file_ext == '.pdf':
-                processed_text = extract_text_from_pdf(file_path)
-            
-            # 如果是图片文件，添加图片描述
-            if file_ext in ALLOWED_IMAGE_EXTENSIONS:
-                image_text = extract_text_from_image(file_path)
-                if image_text:
-                    processed_text += f"\nImage Text:\n{image_text}\n"
-        
-        # 更新处理后的文本
-        ai_review.processed_attachment_text = processed_text
-        db.commit()
+        processed_text = ai_review.processed_attachment_text
         
         # 使用项目的prompt分析文本
         if project.prompt:
-            source_data = analyze_with_openai(project.prompt, processed_text)
+            source_data = analyze_with_openai(
+                project.prompt, 
+                processed_text, 
+                model_name=model_name
+            )
             ai_review.source_data = source_data
             
-            # 使用schema_prompt生成结构化数据
-            if project.schema_prompt:
-                combined_text = f"{processed_text}\n\n分析报告:\n{source_data}"
-                structured_data_str = analyze_with_openai(project.schema_prompt, combined_text, require_json=True)
-                # 尝试将返回的字符串解析为JSON对象
-                try:
-                    import json
-                    structured_data = json.loads(structured_data_str)
-                    ai_review.structured_data = structured_data
-                except json.JSONDecodeError as e:
-                    # 记录错误信息到job.logs
-                    error_msg = f"Error: Failed to parse structured data as JSON: {str(e)}\nReceived data: {structured_data_str}"
-                    job.logs = error_msg if not job.logs else f"{job.logs}\n{error_msg}"
-                    # 使用空JSON对象
-                    ai_review.structured_data = {}
-            else:
-                # 如果没有schema_prompt，使用空JSON对象
-                ai_review.structured_data = {}
-                
         db.commit()
-        
-        # 更新任务状态为完成
-        job.status = JobStatus.COMPLETED
-        job.progress = 100
-        db.commit()
+        return True
         
     except Exception as e:
-        # 更新任务状态为失败
-        error_msg = f"Error: Task execution failed: {str(e)}"
+        error_msg = f"Error: LLM processing failed: {str(e)}"
         job.status = JobStatus.FAILED
         job.logs = error_msg if not job.logs else f"{job.logs}\n{error_msg}"
         db.commit()
         raise
     finally:
         db.close()
+
+# def process_ai_review(article_id: int, job_id: int):
+#     """处理AI审阅任务"""
+#     db = SessionLocal()
+#     try:
+#         # 获取任务信息
+#         job = db.query(Job).filter(Job.id == job_id).first()
+#         if not job:
+#             return
+            
+#         # 更新任务状态为处理中
+#         job.status = JobStatus.PROCESSING
+#         db.commit()
+        
+#         # 获取文章信息
+#         article = db.query(Article).filter(Article.id == article_id).first()
+#         if not article:
+#             raise Exception(f"Error: Article {article_id} not found")
+            
+#         # 获取项目信息
+#         project = article.project
+#         if not project:
+#             raise Exception("Error: Project not found")
+            
+#         # 查找是否已存在相同job的AI审阅报告
+#         ai_review = db.query(AIReviewReport).filter(
+#             AIReviewReport.job_id == job_id
+#         ).first()
+        
+#         # 如果不存在，则创建新的
+#         if not ai_review:
+#             ai_review = AIReviewReport(
+#                 article_id=article_id,
+#                 job_id=job_id,
+#                 is_active=True
+#             )
+#             db.add(ai_review)
+#             db.commit()
+        
+#         # 处理激活的附件
+#         processed_text = ""
+#         active_attachment = None
+#         for attachment in article.attachments:
+#             if attachment.get("is_active"):
+#                 active_attachment = attachment
+#                 break
+                
+#         if active_attachment:
+#             file_path = active_attachment["path"]
+#             file_ext = os.path.splitext(file_path)[1].lower()
+            
+#             # 根据文件类型处理
+#             if file_ext in ['.txt', '.md']:
+#                 with open(file_path, 'r', encoding='utf-8') as f:
+#                     processed_text = f.read()
+#             elif file_ext == '.docx':
+#                 processed_text = extract_text_from_docx(file_path)
+#             elif file_ext == '.pdf':
+#                 processed_text = extract_text_from_pdf(file_path)
+            
+#             # 如果是图片文件，添加图片描述
+#             if file_ext in ALLOWED_IMAGE_EXTENSIONS:
+#                 image_text = extract_text_from_image(file_path)
+#                 if image_text:
+#                     processed_text += f"\nImage Text:\n{image_text}\n"
+        
+#         # 更新处理后的文本
+#         ai_review.processed_attachment_text = processed_text
+#         db.commit()
+        
+#         # 使用项目的prompt分析文本
+#         if project.prompt:
+#             source_data = analyze_with_openai(project.prompt, processed_text)
+#             ai_review.source_data = source_data
+            
+#             # 使用schema_prompt生成结构化数据
+#             if project.schema_prompt:
+#                 combined_text = f"{processed_text}\n\n分析报告:\n{source_data}"
+#                 structured_data_str = analyze_with_openai(project.schema_prompt, combined_text, require_json=True)
+#                 # 尝试将返回的字符串解析为JSON对象
+#                 try:
+#                     import json
+#                     structured_data = json.loads(structured_data_str)
+#                     ai_review.structured_data = structured_data
+#                 except json.JSONDecodeError as e:
+#                     # 记录错误信息到job.logs
+#                     error_msg = f"Error: Failed to parse structured data as JSON: {str(e)}\nReceived data: {structured_data_str}"
+#                     job.logs = error_msg if not job.logs else f"{job.logs}\n{error_msg}"
+#                     # 使用空JSON对象
+#                     ai_review.structured_data = {}
+#             else:
+#                 # 如果没有schema_prompt，使用空JSON对象
+#                 ai_review.structured_data = {}
+                
+#         db.commit()
+        
+#         # 更新任务状态为完成
+#         job.status = JobStatus.COMPLETED
+#         job.progress = 100
+#         db.commit()
+        
+#     except Exception as e:
+#         # 更新任务状态为失败
+#         error_msg = f"Error: Task execution failed: {str(e)}"
+#         job.status = JobStatus.FAILED
+#         job.logs = error_msg if not job.logs else f"{job.logs}\n{error_msg}"
+#         db.commit()
+#         raise
+#     finally:
+#         db.close()
 
 
 def check_job_status(db: Session, job: Job) -> bool:

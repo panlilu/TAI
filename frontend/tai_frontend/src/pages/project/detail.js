@@ -73,7 +73,7 @@ const ProjectDetail = () => {
   // 文件上传配置
   const uploadProps = {
     name: 'file',
-    action: `${config.apiBaseURL}/jobs?project_id=${id}`,
+    action: `${config.apiBaseURL}/jobs_upload?project_id=${id}`,
     headers: {
       Authorization: `Bearer ${localStorage.getItem('token')}`,
     },

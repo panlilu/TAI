@@ -28,7 +28,7 @@ const updateProject = async (id, data) => {
 const uploadFile = async (projectId, file) => {
   const formData = new FormData();
   formData.append('file', file);
-  return await request.post(`/jobs?project_id=${projectId}`, formData, {
+  return await request.post(`/jobs_upload?project_id=${projectId}`, formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
     }

@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import models, schemas, auth, tasks
 from .database import engine, get_db
-from .models import UserRole
+from .schemas import UserRole
 
 redis_conn = Redis()
 task_queue = Queue(connection=redis_conn)
@@ -556,6 +556,66 @@ async def delete_project(
 # Job相关API
 @api_app.post("/jobs", response_model=schemas.Job, tags=["Job Management"])
 async def create_job(
+    job: schemas.JobCreate,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 如果提供了article_id，从article获取project_id
+    if job.article_id:
+        article = db.query(models.Article).filter(models.Article.id == job.article_id).first()
+        if not article:
+            raise HTTPException(status_code=404, detail="Article not found")
+        job.project_id = article.project_id
+
+    # 检查project是否存在且属于当前用户
+    if job.project_id:
+        project = db.query(models.Project).filter(
+            models.Project.id == job.project_id,
+            models.Project.owner_id == current_user.id
+        ).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found or not authorized")
+    
+    # 创建job记录
+    db_job = models.Job(
+        project_id=job.project_id,
+        task=job.task,
+        status=schemas.JobStatus.PENDING,
+        progress=0,
+        logs=""
+    )
+    db.add(db_job)
+    db.commit()
+    db.refresh(db_job)
+    
+    # 根据任务类型将任务加入队列
+    if job.task == schemas.JobTaskType.CONVERT_TO_MARKDOWN:
+        if not job.article_id:
+            raise HTTPException(status_code=400, detail="Article ID is required for convert_to_markdown task")
+        task_queue.enqueue(
+            tasks.convert_to_markdown,
+            args=(job.article_id, db_job.id)
+        )
+    elif job.task == schemas.JobTaskType.PROCESS_WITH_LLM:
+        if not job.article_id:
+            raise HTTPException(status_code=400, detail="Article ID is required for process_with_llm task")
+        task_queue.enqueue(
+            tasks.process_with_llm,
+            args=(job.article_id, db_job.id)
+        )
+    elif job.task == schemas.JobTaskType.PROCESS_UPLOAD:
+        if not job.project_id:
+            raise HTTPException(status_code=400, detail="Project ID is required for process_upload task")
+        raise HTTPException(
+            status_code=400, 
+            detail="For upload tasks, please use the /jobs_upload endpoint"
+        )
+    
+    return db_job
+
+# 上传文件任务
+@api_app.post("/jobs_upload", response_model=schemas.Job, tags=["Job Management"])
+async def create_upload_job(
     project_id: int,
     file: UploadFile = File(...),
     current_user: models.User = Depends(auth.get_current_active_user),
@@ -652,7 +712,7 @@ async def get_job(
 @api_app.post("/jobs/{job_id}/action", response_model=schemas.Job, tags=["Job Management"])
 async def job_action(
     job_id: int,
-    action: schemas.JobAction,
+    action: schemas.JobActionRequest,
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -678,11 +738,31 @@ async def job_action(
         if job.status != schemas.JobStatus.PAUSED:
             raise HTTPException(status_code=400, detail="Can only resume paused jobs")
         job.status = schemas.JobStatus.PROCESSING
-        # 重新加入队列
-        task_queue.enqueue(
-            tasks.process_upload,
-            args=(str(job.id), f"uploads/{current_user.id}/{job.id}", job.project_id)  # 使用位置参数确保正确的参数顺序
-        )
+         # 重新根据任务类型加入队列
+        if job.task == schemas.JobTaskType.PROCESS_UPLOAD:
+            file_path = f"uploads/{current_user.id}/{job.id}"
+            task_queue.enqueue(
+                tasks.process_upload,
+                args=(str(job.id), file_path, job.project_id)
+            )
+        else:
+            # 其他任务类型需要关联文章
+            article = db.query(models.Article).filter(
+                models.Article.project_id == job.project_id
+            ).first()
+            if not article:
+                raise HTTPException(status_code=404, detail="Associated article not found")
+            
+            if job.task == schemas.JobTaskType.CONVERT_TO_MARKDOWN:
+                task_queue.enqueue(
+                    tasks.convert_to_markdown,
+                    args=(article.id, job.id)
+                )
+            elif job.task == schemas.JobTaskType.PROCESS_WITH_LLM:
+                task_queue.enqueue(
+                    tasks.process_with_llm,
+                    args=(article.id, job.id)
+                )
     
     elif action.action == schemas.JobAction.CANCEL:
         if job.status in [schemas.JobStatus.COMPLETED, schemas.JobStatus.FAILED, schemas.JobStatus.CANCELLED]:
@@ -690,34 +770,38 @@ async def job_action(
         job.status = schemas.JobStatus.CANCELLED
     
     elif action.action == schemas.JobAction.RETRY:
-        # 只有已完成、失败或取消的任务可以重试
         if job.status not in [schemas.JobStatus.COMPLETED, schemas.JobStatus.FAILED, schemas.JobStatus.CANCELLED]:
             raise HTTPException(status_code=400, detail="Can only retry completed, failed or cancelled jobs")
         
-        # 重置任务状态和进度
         job.status = schemas.JobStatus.PENDING
         job.progress = 0
         job.logs = ""
         
-        # 根据任务类型重新加入队列
-        if job.task == "process_upload":
-            # 对于上传任务，使用已存在的文件路径
+         # 根据任务类型重新加入队列
+        if job.task == schemas.JobTaskType.PROCESS_UPLOAD:
             file_path = f"uploads/{current_user.id}/{job.id}"
             task_queue.enqueue(
                 tasks.process_upload,
                 args=(str(job.id), file_path, job.project_id)
             )
-        elif job.task == "process_ai_review":
-            # 对于AI审阅任务，需要获取关联的文章ID
+        else:
+            # For other task types, need to get the associated article
             article = db.query(models.Article).filter(
                 models.Article.project_id == job.project_id
             ).first()
             if not article:
                 raise HTTPException(status_code=404, detail="Associated article not found")
-            task_queue.enqueue(
-                tasks.process_ai_review,
-                args=(article.id, job.id)
-            )
+            
+            if job.task == schemas.JobTaskType.CONVERT_TO_MARKDOWN:
+                task_queue.enqueue(
+                    tasks.convert_to_markdown,
+                    args=(article.id, job.id)
+                )
+            elif job.task == schemas.JobTaskType.PROCESS_WITH_LLM:
+                task_queue.enqueue(
+                    tasks.process_with_llm,
+                    args=(article.id, job.id)
+                )
     
     db.commit()
     db.refresh(job)
