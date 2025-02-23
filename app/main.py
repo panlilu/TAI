@@ -170,7 +170,6 @@ async def create_article_type(
         name=article_type.name,
         is_public=article_type.is_public,
         prompt=article_type.prompt,
-        fields=article_type.fields,
         owner_id=current_user.id
     )
     db.add(db_article_type)
@@ -207,7 +206,6 @@ async def update_article_type(
     
     db_article_type.name = article_type.name
     db_article_type.prompt = article_type.prompt
-    db_article_type.fields = article_type.fields
     db.commit()
     db.refresh(db_article_type)
     return db_article_type
@@ -471,12 +469,10 @@ async def create_project(
     else:
         project_name = project.name
     
-    # 创建project，从article_type复制prompt、schema_prompt和fields
+    # 创建project，从article_type复制prompt
     db_project = models.Project(
         name=project_name,
         prompt=article_type.prompt,
-        schema_prompt=article_type.schema_prompt,
-        fields=article_type.fields,
         auto_approve=project.auto_approve,
         owner_id=current_user.id,
         article_type_id=project.article_type_id
@@ -528,8 +524,6 @@ async def update_project(
         db_project.name = project.name
     if project.prompt is not None:
         db_project.prompt = project.prompt
-    if project.fields is not None:
-        db_project.fields = project.fields
     if project.auto_approve is not None:
         db_project.auto_approve = project.auto_approve
     
@@ -590,6 +584,23 @@ async def create_job(
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
     
+    # 将任务添加到队列中
+    task_queue.enqueue(
+        tasks.process_upload,
+        args=(str(db_job.id), file_path, project_id)
+    )
+    
+    return db_job
+
+@api_app.get("/jobs", response_model=List[schemas.Job], tags=["Job Management"])
+async def get_jobs(
+    skip: int = 0,
+    limit: int = 100,
+    project_id: Optional[int] = None,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 构建基本查询，包含项目所有权验证
     query = db.query(models.Job).join(
         models.Project,
         models.Job.project_id == models.Project.id
