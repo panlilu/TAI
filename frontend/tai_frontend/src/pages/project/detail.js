@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
-import { Card, Table, Button, Input, Form, Upload, message, Tabs } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Card, Table, Button, Input, Form, Upload, message, Tabs, Space } from 'antd';
+import { UploadOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
 import config from '../../config';
 
@@ -9,10 +9,11 @@ const { TextArea } = Input;
 
 const ProjectDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [project, setProject] = useState(null);
   const [articles, setArticles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [form] = Form.useForm(); // 移到组件内部
+  const [form] = Form.useForm();
 
   // 使用useCallback来缓存函数
   const fetchProject = useCallback(async () => {
@@ -97,6 +98,14 @@ const ProjectDetail = () => {
       title: '文章名称',
       dataIndex: 'name',
       key: 'name',
+      render: (text, record) => (
+        <Button 
+          type="link" 
+          onClick={() => navigate(`/project/${id}/articles/${record.id}`)}
+        >
+          {text}
+        </Button>
+      ),
     },
     {
       title: '创建时间',
@@ -108,9 +117,23 @@ const ProjectDetail = () => {
       title: '操作',
       key: 'action',
       render: (_, record) => (
-        <Button type="link" danger onClick={() => handleDeleteArticle(record.id)}>
-          删除
-        </Button>
+        <Space>
+          <Button
+            type="link"
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/project/${id}/articles/${record.id}`)}
+          >
+            查看
+          </Button>
+          <Button 
+            type="link" 
+            danger 
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteArticle(record.id)}
+          >
+            删除
+          </Button>
+        </Space>
       ),
     },
   ];

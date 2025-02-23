@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, message, Popconfirm } from 'antd';
+import { Table, Button, Modal, Form, Input, message, Popconfirm, Switch } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
 
@@ -137,11 +137,33 @@ const ArticleType = () => {
           >
             <Input />
           </Form.Item>
+
+
           <Form.Item
-            name="description"
-            label="描述"
+            name="is_public"
+            label="是否公开"
+          >
+            <Switch />
+          </Form.Item>
+
+          <Form.Item
+            name="prompt"
+            label="prompt"
           >
             <Input.TextArea />
+          </Form.Item>
+          <Form.Item
+            name="schema_prompt"
+            label="schema_prompt"
+          >
+            <Input.TextArea />
+          </Form.Item>
+
+          <Form.Item
+            name="fields"
+            hidden
+          >
+            <Input />
           </Form.Item>
         </Form>
       </Modal>

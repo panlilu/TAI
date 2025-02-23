@@ -13,6 +13,9 @@ from redis import Redis
 from rq import Queue
 import asyncio
 import json
+import base64
+import mimetypes
+from pathlib import Path
 
 from . import models, schemas, auth, tasks
 from .database import engine, get_db
@@ -350,6 +353,49 @@ async def delete_all_articles(
     db.commit()
     return {"message": "All articles deleted successfully"}
 
+@api_app.get("/articles/{article_id}/content", response_model=schemas.ArticleContentResponse, tags=["Article Management"])
+async def get_article_content(
+    article_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    db_article = db.query(models.Article).filter(models.Article.id == article_id).first()
+    if db_article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+        
+    attachments = db_article.attachments
+    active_attachment = next((att for att in attachments if att.get('is_active')), attachments[0] if attachments else None)
+    
+    if not active_attachment:
+        raise HTTPException(status_code=404, detail="No attachment found")
+        
+    file_path = active_attachment['path']
+    filename = active_attachment['filename']
+    
+    # Detect mime type
+    mime_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+    is_text = mime_type.startswith('text/') or filename.endswith(('.md', '.txt'))
+    
+    try:
+        if is_text:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                is_base64 = False
+        else:
+            with open(file_path, 'rb') as f:
+                content = base64.b64encode(f.read()).decode('utf-8')
+                is_base64 = True
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+        
+    return {
+        "content": content,
+        "filename": filename,
+        "path": file_path,
+        "content_type": mime_type,
+        "is_base64": is_base64
+    }
+
 # AI批阅报告管理API
 @api_app.post("/ai-reviews", response_model=schemas.AIReviewReport, tags=["AI Review Management"])
 async def create_ai_review(
@@ -544,23 +590,6 @@ async def create_job(
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
     
-    # 将任务加入队列
-    task_queue.enqueue(
-        tasks.process_upload,
-        args=(str(db_job.id), file_path, project_id)  # 使用位置参数确保正确的参数顺序
-    )
-    
-    return db_job
-
-@api_app.get("/jobs", response_model=List[schemas.Job], tags=["Job Management"])
-async def get_jobs(
-    project_id: Optional[int] = None,
-    skip: int = 0,
-    limit: int = 100,
-    current_user: models.User = Depends(auth.get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    # 基础查询：获取与用户相关的所有项目的任务
     query = db.query(models.Job).join(
         models.Project,
         models.Job.project_id == models.Project.id

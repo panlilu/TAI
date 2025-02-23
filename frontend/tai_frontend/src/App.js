@@ -1,5 +1,4 @@
 import React, { useEffect } from 'react';
-// import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
@@ -14,6 +13,7 @@ import ArticleType from './pages/article-type';
 import Jobs from './pages/jobs';
 import ProjectList from './pages/project';
 import ProjectDetail from './pages/project/detail';
+import ArticleViewer from './pages/project/article';
 import ReviewWizard from './pages/review-wizard';
 import AuthRoute from './components/AuthRoute';
 import { eventService } from './utils/eventService';
@@ -25,12 +25,10 @@ function App() {
   useEffect(() => {
     const token = getToken();
     if (token) {
-      // Start listening for job events
       eventService.connect();
     }
     
     return () => {
-      // Cleanup SSE connection when component unmounts
       eventService.disconnect();
     };
   }, []);
@@ -42,7 +40,6 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           
-          {/* 需要认证的路由 */}
           <Route
             path="/dashboard"
             element={
@@ -104,13 +101,22 @@ function App() {
               <AuthRoute>
                 <MainLayout>
                   <ProjectDetail />
-                </MainLayout>ß
+                </MainLayout>
               </AuthRoute>
             }
           />
 
-          {/* 重定向到仪表盘 */}
-          {/* <Route path="/" element={<Navigate to="/dashboard" replace />} /> */}
+          <Route
+            path="/project/:projectId/articles/:articleId"
+            element={
+              <AuthRoute>
+                <MainLayout>
+                  <ArticleViewer />
+                </MainLayout>
+              </AuthRoute>
+            }
+          />
+
           <Route
             path="/review-wizard"
             element={

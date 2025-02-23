@@ -1,3 +1,5 @@
+@import '~github-markdown-css/github-markdown.css';
+
 /* 重置样式 */
 * {
   margin: 0;
@@ -93,5 +95,20 @@ body {
   
   .ant-card {
     margin-bottom: 12px;
+  }
+}
+
+/* Markdown styling */
+.markdown-body {
+  box-sizing: border-box;
+  min-width: 200px;
+  max-width: 100%;
+  margin: 0 auto;
+  background-color: white;
+}
+
+@media (max-width: 767px) {
+  .markdown-body {
+    padding: 15px;
   }
 }
