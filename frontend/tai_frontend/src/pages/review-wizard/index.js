@@ -68,7 +68,6 @@ const ReviewWizard = () => {
           form.setFieldsValue({
             projectName: project.name,
             prompt: project.prompt,
-            schemaPrompt: project.schema_prompt
           });
         } catch (error) {
           console.log(error);
@@ -122,13 +121,6 @@ const ReviewWizard = () => {
           >
             <Input.TextArea rows={4} placeholder="请输入提示" />
           </Form.Item>
-          <Form.Item
-            name="schemaPrompt"
-            label="格式化提示"
-            rules={[{ required: true, message: '请输入格式化提示' }]}
-          >
-            <Input.TextArea rows={4} placeholder="请输入格式化提示" />
-          </Form.Item>
         </>
       ),
     },
@@ -176,12 +168,11 @@ const ReviewWizard = () => {
       
       // 如果是第二步，保存项目参数
       if (current === 1) {
-        const { projectName, prompt, schemaPrompt} = values;
+        const { projectName, prompt } = values;
         await updateProject(projectId, {
           name: projectName,
           article_type_id: currentArticleTypeId,
           prompt,
-          schema_prompt: schemaPrompt,
         });
       }
       

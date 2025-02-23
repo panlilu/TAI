@@ -22,7 +22,6 @@ const ProjectDetail = () => {
       setProject(response);
       form.setFieldsValue({
         prompt: response.prompt,
-        schema_prompt: response.schema_prompt,
       });
     } catch (error) {
       message.error('获取项目详情失败');
@@ -167,22 +166,15 @@ const ProjectDetail = () => {
         <Form
           form={form}
           onFinish={handleUpdatePrompt}
+          initialValues={project}
           layout="vertical"
         >
           <Form.Item
             name="prompt"
-            label="审核Prompt"
+            label="审阅提示"
           >
-            <TextArea rows={4} placeholder="请输入审核用的prompt" />
+            <Input.TextArea rows={10} />
           </Form.Item>
-
-          <Form.Item
-            name="schema_prompt"
-            label="格式化Prompt"
-          >
-            <TextArea rows={4} placeholder="请输入用于生成格式化数据的prompt" />
-          </Form.Item>
-
           <Form.Item>
             <Button type="primary" htmlType="submit">
               保存

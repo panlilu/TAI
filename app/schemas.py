@@ -45,8 +45,6 @@ class ArticleTypeBase(BaseModel):
     name: str
     is_public: bool
     prompt: str
-    schema_prompt: str
-    fields: dict
 
 class ArticleTypeCreate(ArticleTypeBase):
     pass
@@ -62,8 +60,6 @@ class ArticleType(ArticleTypeBase):
 class ArticleTypeUpdate(BaseModel):
     name: Optional[str] = None
     prompt: Optional[str] = None
-    schema_prompt: Optional[str] = None
-    fields: Optional[dict] = None
 
 # 附件相关模型
 class AttachmentSchema(BaseModel):
@@ -143,8 +139,6 @@ class AIReviewReportUpdate(BaseModel):
 class ProjectBase(BaseModel):
     name: str
     prompt: str
-    schema_prompt: str
-    fields: dict
     auto_approve: bool = True
 
 class ProjectCreate(BaseModel):
@@ -164,8 +158,6 @@ class Project(ProjectBase):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     prompt: Optional[str] = None
-    schema_prompt: Optional[str] = None
-    fields: Optional[dict] = None
     auto_approve: Optional[bool] = None
 
 # Job相关模型

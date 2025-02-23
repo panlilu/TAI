@@ -138,7 +138,6 @@ const ArticleType = () => {
             <Input />
           </Form.Item>
 
-
           <Form.Item
             name="is_public"
             label="是否公开"
@@ -151,19 +150,6 @@ const ArticleType = () => {
             label="prompt"
           >
             <Input.TextArea />
-          </Form.Item>
-          <Form.Item
-            name="schema_prompt"
-            label="schema_prompt"
-          >
-            <Input.TextArea />
-          </Form.Item>
-
-          <Form.Item
-            name="fields"
-            hidden
-          >
-            <Input />
           </Form.Item>
         </Form>
       </Modal>
