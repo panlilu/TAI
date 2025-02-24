@@ -14,6 +14,7 @@ const ArticleViewer = () => {
   const [markdownContent, setMarkdownContent] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [aiReview, setAiReview] = useState(null);
 
   useEffect(() => {
     const fetchArticle = async () => {
@@ -40,8 +41,9 @@ const ArticleViewer = () => {
         // 获取 AI review 内容
         const aiReviewResponse = await request(`/ai-reviews?article_id=${articleId}`);
         if (aiReviewResponse && aiReviewResponse.length > 0) {
-          // 假设返回的是一个数组，我们取最新的一条记录
+          // 取最新的一条记录
           const latestReview = aiReviewResponse[0];
+          setAiReview(latestReview);
           if (latestReview.processed_attachment_text) {
             setMarkdownContent(latestReview.processed_attachment_text);
           }
@@ -154,6 +156,23 @@ const ArticleViewer = () => {
       ) : (
         <div style={{ textAlign: 'center', padding: '20px' }}>暂无Markdown内容</div>
       )
+    },
+    {
+      key: '3',
+      label: 'AI审阅报告',
+      children: aiReview ? (
+        <div className="markdown-body" style={{ 
+          padding: '20px',
+          maxWidth: '900px',
+          margin: '0 auto',
+          backgroundColor: 'var(--color-canvas-default)',
+          color: 'var(--color-fg-default)'
+        }}>
+          <ReactMarkdown key={aiReview.source_data}>{aiReview.source_data}</ReactMarkdown>
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '20px' }}>暂无AI审阅报告</div>
+      )
     }
   ];
 
@@ -165,7 +184,7 @@ const ArticleViewer = () => {
             <span>{article.name}</span>
             <Space>
               <Button onClick={handleConvertToMarkdown}>转换为Markdown</Button>
-              <Button type="primary" onClick={handleAIProcess}>AI处理</Button>
+              <Button type="primary" onClick={handleAIProcess}>AI审阅</Button>
               <Button 
                 type="text" 
                 icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />} 

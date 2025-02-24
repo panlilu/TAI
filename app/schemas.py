@@ -129,9 +129,6 @@ class AIReviewReport(AIReviewReportBase):
     def serialize_datetime(self, dt: datetime) -> str:
         return dt.isoformat() if dt else None
 
-    @field_serializer('source_data')
-    def serialize_source_data(self, data: str) -> str:
-        return data if data is not None else ""
 
 class AIReviewReportUpdate(BaseModel):
     source_data: Optional[str] = None

@@ -20,9 +20,9 @@ const ProjectDetail = () => {
     try {
       const response = await request(`/projects/${id}`);
       setProject(response);
-      form.setFieldsValue({
-        prompt: response.prompt,
-      });
+      // form.setFieldsValue({
+      //   prompt: response.prompt,
+      // });
     } catch (error) {
       message.error('获取项目详情失败');
     }
@@ -166,7 +166,7 @@ const ProjectDetail = () => {
         <Form
           form={form}
           onFinish={handleUpdatePrompt}
-          initialValues={project}
+          initialValues={{ prompt: project?.prompt }}
           layout="vertical"
         >
           <Form.Item

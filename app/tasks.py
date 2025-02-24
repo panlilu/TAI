@@ -176,8 +176,7 @@ def process_with_llm(article_id: int, job_id: int, model_name: str = None):
             
         # 获取AI审阅报告
         ai_review = db.query(AIReviewReport).filter(
-            AIReviewReport.article_id == article_id,
-            AIReviewReport.job_id == job_id
+            AIReviewReport.article_id == article_id
         ).first()
         
         if not ai_review or not ai_review.processed_attachment_text:

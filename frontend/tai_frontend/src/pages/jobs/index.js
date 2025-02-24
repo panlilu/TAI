@@ -32,7 +32,7 @@ const Jobs = () => {
 
   const handleRetry = async (id) => {
     try {
-      await request.post(`/jobs/${id}/retry`);
+      await request.post(`/jobs/${id}/action`, { action: 'retry' });
       message.success('重试任务成功');
       fetchData();
     } catch (error) {
@@ -42,7 +42,7 @@ const Jobs = () => {
 
   const handlePause = async (id) => {
     try {
-      await request.post(`/jobs/${id}/pause`);
+      await request.post(`/jobs/${id}/action`, { action: 'pause' });
       message.success('暂停任务成功');
       fetchData();
     } catch (error) {
@@ -52,7 +52,7 @@ const Jobs = () => {
 
   const handleResume = async (id) => {
     try {
-      await request.post(`/jobs/${id}/resume`);
+      await request.post(`/jobs/${id}/action`, { action: 'resume' });
       message.success('启动任务成功');
       fetchData();
     } catch (error) {
