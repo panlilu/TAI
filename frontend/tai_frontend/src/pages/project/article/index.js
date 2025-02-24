@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import 'github-markdown-css';
 import request from '../../../utils/request';
 import config from '../../../config';
+import { eventService } from '../../../utils/eventService';
 
 const ArticleViewer = () => {
   const { projectId, articleId } = useParams();
@@ -15,6 +16,33 @@ const ArticleViewer = () => {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [aiReview, setAiReview] = useState(null);
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+
+  const connectToAIReviewEvents = (aiReviewId) => {
+    setIsAiProcessing(true);
+    
+    eventService.connectToAIReview(
+      aiReviewId,
+      (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'content') {
+          setAiReview(prev => ({
+            ...prev,
+            source_data: (prev?.source_data || '') + data.content
+          }));
+
+          if (data.is_final) {
+            setIsAiProcessing(false);
+            eventService.disconnectAIReview();
+          }
+        }
+      },
+      () => {
+        setIsAiProcessing(false);
+      }
+    );
+  };
 
   useEffect(() => {
     const fetchArticle = async () => {
@@ -47,6 +75,11 @@ const ArticleViewer = () => {
           if (latestReview.processed_attachment_text) {
             setMarkdownContent(latestReview.processed_attachment_text);
           }
+
+          // 如果存在AI审阅报告且正在处理中，启动实时更新
+          if (latestReview.status !== 'completed') {
+            connectToAIReviewEvents(latestReview.id);
+          }
         }
       } catch (error) {
         message.error('获取文章详情失败');
@@ -55,11 +88,12 @@ const ArticleViewer = () => {
 
     fetchArticle();
 
-    // Cleanup function to revoke blob URL
+    // Cleanup function
     return () => {
       if (pdfUrl) {
         URL.revokeObjectURL(pdfUrl);
       }
+      eventService.disconnectAIReview();
     };
   }, [articleId]);
 
@@ -77,12 +111,22 @@ const ArticleViewer = () => {
 
   const handleAIProcess = async () => {
     try {
-      const response = await request.post(`/jobs`, {
+      setIsAiProcessing(true);
+      const response = await request.post('/jobs', {
         task: 'process_with_llm',
         article_id: articleId
       });
-      message.success('已创建AI处理任务，请稍后查看任务状态');
+      message.success('已创建AI处理任务，请稍后在AI审阅报告标签页查看进度');
+      
+      // 创建新的 AI 审阅报告记录并启动实时更新
+      const aiReviewResponse = await request(`/ai-reviews?article_id=${articleId}`);
+      if (aiReviewResponse && aiReviewResponse.length > 0) {
+        const latestReview = aiReviewResponse[0];
+        setAiReview(latestReview);
+        connectToAIReviewEvents(latestReview.id);
+      }
     } catch (error) {
+      setIsAiProcessing(false);
       message.error('创建AI处理任务失败');
     }
   };
@@ -160,18 +204,34 @@ const ArticleViewer = () => {
     {
       key: '3',
       label: 'AI审阅报告',
-      children: aiReview ? (
+      children: (
         <div className="markdown-body" style={{ 
           padding: '20px',
           maxWidth: '900px',
           margin: '0 auto',
           backgroundColor: 'var(--color-canvas-default)',
-          color: 'var(--color-fg-default)'
+          color: 'var(--color-fg-default)',
+          position: 'relative'
         }}>
-          <ReactMarkdown key={aiReview.source_data}>{aiReview.source_data}</ReactMarkdown>
+          {isAiProcessing && (
+            <div style={{ 
+              position: 'absolute', 
+              top: '10px', 
+              right: '10px', 
+              padding: '5px 10px',
+              background: '#1890ff',
+              color: 'white',
+              borderRadius: '4px'
+            }}>
+              正在生成...
+            </div>
+          )}
+          {aiReview?.source_data ? (
+            <ReactMarkdown key={aiReview.source_data}>{aiReview.source_data}</ReactMarkdown>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '20px' }}>暂无AI审阅报告</div>
+          )}
         </div>
-      ) : (
-        <div style={{ textAlign: 'center', padding: '20px' }}>暂无AI审阅报告</div>
       )
     }
   ];

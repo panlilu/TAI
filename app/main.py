@@ -907,3 +907,71 @@ async def job_events(
         event_generator(),
         media_type="text/event-stream"
     )
+
+@api_app.get("/events_ai_review/{ai_review_id}")
+async def ai_review_events(
+    ai_review_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 检查 AI 审阅报告是否存在并且属于当前用户的项目
+    ai_review = db.query(models.AIReviewReport).join(
+        models.Article
+    ).join(
+        models.Project
+    ).filter(
+        models.AIReviewReport.id == ai_review_id,
+        models.Project.owner_id == current_user.id
+    ).first()
+    
+    if not ai_review:
+        raise HTTPException(
+            status_code=404,
+            detail="AI review not found or not authorized"
+        )
+
+    last_source_data = ai_review.source_data
+    last_check_time = datetime.utcnow()
+
+    async def event_generator():
+        nonlocal last_source_data, last_check_time
+        heartbeat_interval = 30  # 30秒发送一次心跳
+        last_heartbeat = 0
+
+        while True:
+            current_time = datetime.utcnow()
+
+            # 发送心跳
+            if (current_time.timestamp() - last_heartbeat) >= heartbeat_interval:
+                yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+                last_heartbeat = current_time.timestamp()
+
+            # 刷新数据库会话并重新查询 AI 审阅报告
+            db.expire_all()
+            current_ai_review = db.query(models.AIReviewReport).filter(
+                models.AIReviewReport.id == ai_review_id
+            ).first()
+
+            if current_ai_review and current_ai_review.updated_at > last_check_time:
+                # 如果source_data发生变化，计算新增的内容
+                if current_ai_review.source_data != last_source_data:
+                    # 找出新增的内容
+                    new_content = current_ai_review.source_data[len(last_source_data):] if last_source_data else current_ai_review.source_data
+                    if new_content:
+                        data = {
+                            "type": "content",
+                            "content": new_content,
+                            "is_final": current_ai_review.status == "completed"
+                        }
+                        yield f"data: {json.dumps(data)}\n\n"
+                    last_source_data = current_ai_review.source_data
+
+                last_check_time = current_time
+
+            await asyncio.sleep(0.5)  # 每0.5秒检查一次更新
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream"
+    )
+

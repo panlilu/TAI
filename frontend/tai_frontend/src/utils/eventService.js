@@ -6,6 +6,7 @@ import config from '../config';
 class EventService {
   constructor() {
     this.eventSource = null;
+    this.aiReviewEventSource = null;
   }
 
   connect() {
@@ -47,6 +48,38 @@ class EventService {
     if (this.eventSource) {
       this.eventSource.close();
       this.eventSource = null;
+    }
+  }
+
+  connectToAIReview(aiReviewId, onMessage, onError) {
+    if (this.aiReviewEventSource) {
+      this.aiReviewEventSource.close();
+    }
+
+    const token = getToken();
+    if (!token) return;
+
+    this.aiReviewEventSource = new EventSourcePolyfill(
+      `${config.apiBaseURL}/events_ai_review/${aiReviewId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    this.aiReviewEventSource.onmessage = onMessage;
+    this.aiReviewEventSource.onerror = (error) => {
+      console.error('AI Review SSE Error:', error);
+      this.aiReviewEventSource.close();
+      if (onError) onError(error);
+    };
+  }
+
+  disconnectAIReview() {
+    if (this.aiReviewEventSource) {
+      this.aiReviewEventSource.close();
+      this.aiReviewEventSource = null;
     }
   }
 }

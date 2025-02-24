@@ -48,13 +48,16 @@ class AIReviewReport(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     article_id = Column(Integer, ForeignKey("articles.id"))  # 关联的文章ID
-    job_id = Column(Integer, ForeignKey("jobs.id"))  # 关联的任务ID
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=True)  # 关联的任务ID
     source_data = Column(String)  # 源数据
     processed_attachment_text = Column(Text)  # 处理后的附件文本内容
     created_at = Column(DateTime(timezone=True), server_default=func.now())  # 创建时间
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())  # 更新时间
     is_active = Column(Boolean, default=False)  # 是否为当前激活的批阅报告
+    status = Column(String, default="pending")  # pending, processing, completed, failed
     
     article = relationship("Article", back_populates="ai_reviews")
+    job = relationship("Job")
 
 class Project(Base):
     __tablename__ = "projects"

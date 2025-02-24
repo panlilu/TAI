@@ -151,170 +151,102 @@ def convert_to_markdown(article_id: int, job_id: int):
     finally:
         db.close()
 
-def process_with_llm(article_id: int, job_id: int, model_name: str = None):
-    """使用LLM处理文章内容"""
+def process_with_llm(article_id: int, job_id: int):
+    """处理文章内容并生成AI审阅报告"""
     db = SessionLocal()
     try:
         # 获取任务信息
         job = db.query(Job).filter(Job.id == job_id).first()
         if not job:
-            return
+            raise Exception("Job not found")
             
-        # 更新任务状态为处理中
+        # 更新任务状态
         job.status = JobStatus.PROCESSING
+        job.progress = 0
         db.commit()
-        
+
         # 获取文章信息
         article = db.query(Article).filter(Article.id == article_id).first()
         if not article:
-            raise Exception(f"Error: Article {article_id} not found")
-            
+            raise Exception("Article not found")
+
         # 获取项目信息
-        project = article.project
+        project = db.query(Project).filter(Project.id == article.project_id).first()
         if not project:
-            raise Exception("Error: Project not found")
-            
+            raise Exception("Project not found")
+
         # 获取AI审阅报告
         ai_review = db.query(AIReviewReport).filter(
             AIReviewReport.article_id == article_id
         ).first()
-        
+
         if not ai_review or not ai_review.processed_attachment_text:
             raise Exception("No processed text found. Please run convert_to_markdown first.")
         
         processed_text = ai_review.processed_attachment_text
-        
-        # 使用项目的prompt分析文本
-        if project.prompt:
-            source_data = analyze_with_openai(
-                project.prompt, 
-                processed_text, 
-                model_name=model_name
+        # 使用LLM处理文章内容
+        try:
+            # 获取项目提示词
+            prompt = project.prompt
+            model = os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
+
+            # 使用litellm的流式API
+            response = completion(
+                model=model,
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": processed_text}
+                ],
+                stream=True  # 启用流式输出
             )
-            ai_review.source_data = source_data
+
+            # 初始化累积的响应文本
+            accumulated_response = ""
             
+            # 处理流式响应
+            for chunk in response:
+                # 检查任务状态
+                if not check_job_status(db, job):
+                    return
+
+                # 从chunk中提取文本
+                if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        accumulated_response += content
+                        # 更新AI审阅报告的source_data
+                        ai_review.source_data = accumulated_response
+                        db.commit()
+
+                # 更新进度（这里使用一个近似值）
+                current_length = len(accumulated_response)
+                if current_length > 0:
+                    progress = min(95, int((current_length / 1000) * 5))  # 假设平均响应长度为1000字符
+                    job.progress = progress
+                    db.commit()
+
+            # 完成处理
+            job.progress = 100
+            job.status = JobStatus.COMPLETED
+            ai_review.status = "completed"
+            
+        except Exception as e:
+            job.status = JobStatus.FAILED
+            job.logs += f"\nError during LLM processing: {str(e)}"
+            ai_review.status = "failed"
+            raise
+
         db.commit()
-        return True
-        
+        return job
+
     except Exception as e:
-        error_msg = f"Error: LLM processing failed: {str(e)}"
         job.status = JobStatus.FAILED
-        job.logs = error_msg if not job.logs else f"{job.logs}\n{error_msg}"
+        job.logs += f"\nError: {str(e)}"
         db.commit()
         raise
+
     finally:
         db.close()
-
-# def process_ai_review(article_id: int, job_id: int):
-#     """处理AI审阅任务"""
-#     db = SessionLocal()
-#     try:
-#         # 获取任务信息
-#         job = db.query(Job).filter(Job.id == job_id).first()
-#         if not job:
-#             return
-            
-#         # 更新任务状态为处理中
-#         job.status = JobStatus.PROCESSING
-#         db.commit()
-        
-#         # 获取文章信息
-#         article = db.query(Article).filter(Article.id == article_id).first()
-#         if not article:
-#             raise Exception(f"Error: Article {article_id} not found")
-            
-#         # 获取项目信息
-#         project = article.project
-#         if not project:
-#             raise Exception("Error: Project not found")
-            
-#         # 查找是否已存在相同job的AI审阅报告
-#         ai_review = db.query(AIReviewReport).filter(
-#             AIReviewReport.job_id == job_id
-#         ).first()
-        
-#         # 如果不存在，则创建新的
-#         if not ai_review:
-#             ai_review = AIReviewReport(
-#                 article_id=article_id,
-#                 job_id=job_id,
-#                 is_active=True
-#             )
-#             db.add(ai_review)
-#             db.commit()
-        
-#         # 处理激活的附件
-#         processed_text = ""
-#         active_attachment = None
-#         for attachment in article.attachments:
-#             if attachment.get("is_active"):
-#                 active_attachment = attachment
-#                 break
-                
-#         if active_attachment:
-#             file_path = active_attachment["path"]
-#             file_ext = os.path.splitext(file_path)[1].lower()
-            
-#             # 根据文件类型处理
-#             if file_ext in ['.txt', '.md']:
-#                 with open(file_path, 'r', encoding='utf-8') as f:
-#                     processed_text = f.read()
-#             elif file_ext == '.docx':
-#                 processed_text = extract_text_from_docx(file_path)
-#             elif file_ext == '.pdf':
-#                 processed_text = extract_text_from_pdf(file_path)
-            
-#             # 如果是图片文件，添加图片描述
-#             if file_ext in ALLOWED_IMAGE_EXTENSIONS:
-#                 image_text = extract_text_from_image(file_path)
-#                 if image_text:
-#                     processed_text += f"\nImage Text:\n{image_text}\n"
-        
-#         # 更新处理后的文本
-#         ai_review.processed_attachment_text = processed_text
-#         db.commit()
-        
-#         # 使用项目的prompt分析文本
-#         if project.prompt:
-#             source_data = analyze_with_openai(project.prompt, processed_text)
-#             ai_review.source_data = source_data
-            
-#             # 使用schema_prompt生成结构化数据
-#             if project.schema_prompt:
-#                 combined_text = f"{processed_text}\n\n分析报告:\n{source_data}"
-#                 structured_data_str = analyze_with_openai(project.schema_prompt, combined_text, require_json=True)
-#                 # 尝试将返回的字符串解析为JSON对象
-#                 try:
-#                     import json
-#                     structured_data = json.loads(structured_data_str)
-#                     ai_review.structured_data = structured_data
-#                 except json.JSONDecodeError as e:
-#                     # 记录错误信息到job.logs
-#                     error_msg = f"Error: Failed to parse structured data as JSON: {str(e)}\nReceived data: {structured_data_str}"
-#                     job.logs = error_msg if not job.logs else f"{job.logs}\n{error_msg}"
-#                     # 使用空JSON对象
-#                     ai_review.structured_data = {}
-#             else:
-#                 # 如果没有schema_prompt，使用空JSON对象
-#                 ai_review.structured_data = {}
-                
-#         db.commit()
-        
-#         # 更新任务状态为完成
-#         job.status = JobStatus.COMPLETED
-#         job.progress = 100
-#         db.commit()
-        
-#     except Exception as e:
-#         # 更新任务状态为失败
-#         error_msg = f"Error: Task execution failed: {str(e)}"
-#         job.status = JobStatus.FAILED
-#         job.logs = error_msg if not job.logs else f"{job.logs}\n{error_msg}"
-#         db.commit()
-#         raise
-#     finally:
-#         db.close()
-
 
 def check_job_status(db: Session, job: Job) -> bool:
     """检查任务是否应该继续执行"""

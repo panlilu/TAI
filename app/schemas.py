@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, computed_field, field_serializer, model_serializer
-from typing import Optional, Literal
+from typing import Optional, Literal, Dict, Any
 from enum import Enum
 
 class UserRole(str, Enum):
@@ -113,6 +113,9 @@ class AIReviewReportBase(BaseModel):
 
 class AIReviewReportCreate(AIReviewReportBase):
     article_id: int
+    source_data: str = ""
+    structured_data: Optional[Dict[str, Any]] = None
+    status: str = "pending"
 
 class AIReviewReport(AIReviewReportBase):
     id: int
@@ -120,6 +123,8 @@ class AIReviewReport(AIReviewReportBase):
     created_at: datetime
     is_active: bool
     job_id: int | None
+    status: str = "pending"
+    structured_data: Optional[Dict[str, Any]] = None
 
     model_config = {
         "from_attributes": True
@@ -133,6 +138,8 @@ class AIReviewReport(AIReviewReportBase):
 class AIReviewReportUpdate(BaseModel):
     source_data: Optional[str] = None
     is_active: Optional[bool] = None
+    status: Optional[str] = None
+    structured_data: Optional[Dict[str, Any]] = None
 
 # 项目相关模型
 class ProjectBase(BaseModel):
