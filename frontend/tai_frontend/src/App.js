@@ -34,7 +34,17 @@ function App() {
   }, []);
 
   return (
-    <ConfigProvider locale={zhCN}>
+    <ConfigProvider
+      locale={zhCN}
+      theme={{
+        token: {
+          colorPrimary: '#3778a4',
+          colorLink: '#3778a4',
+          colorLinkHover: '#4b8fb8',
+          colorLinkActive: '#2d5f83',
+        },
+      }}
+    >
       <Router>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

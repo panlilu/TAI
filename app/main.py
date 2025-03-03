@@ -31,7 +31,7 @@ app = FastAPI()
 
 # 创建API子应用
 api_app = FastAPI(
-    title="User Management API",
+    title="TAI API",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"

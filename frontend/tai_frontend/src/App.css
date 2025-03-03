@@ -7,6 +7,20 @@
   box-sizing: border-box;
 }
 
+/* 全局链接样式 */
+a {
+  color: #3778a4;
+  text-decoration: none;
+}
+
+a:hover {
+  color: #4b8fb8;
+}
+
+a:active {
+  color: #2d5f83;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
@@ -53,7 +67,7 @@ body {
 }
 
 .ant-menu-item.ant-menu-item-selected {
-  background-color: #1890ff !important;
+  background-color: #3778a4 !important;
 }
 
 /* 表格样式 */
@@ -112,3 +126,4 @@ body {
     padding: 15px;
   }
 }
+
