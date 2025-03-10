@@ -67,7 +67,7 @@ const ReviewWizard = () => {
           const project = await getProject(projectId);
           form.setFieldsValue({
             projectName: project.name,
-            prompt: project.prompt,
+            prompt: project.config?.prompt || '',
           });
         } catch (error) {
           console.log(error);
@@ -171,8 +171,9 @@ const ReviewWizard = () => {
         const { projectName, prompt } = values;
         await updateProject(projectId, {
           name: projectName,
-          article_type_id: currentArticleTypeId,
-          prompt,
+          config: {
+            prompt: prompt
+          }
         });
       }
       

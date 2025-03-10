@@ -20,9 +20,9 @@ const ProjectDetail = () => {
     try {
       const response = await request(`/projects/${id}`);
       setProject(response);
-      // form.setFieldsValue({
-      //   prompt: response.prompt,
-      // });
+      form.setFieldsValue({
+        prompt: response.config?.prompt || '',
+      });
     } catch (error) {
       message.error('获取项目详情失败');
     }
@@ -48,7 +48,12 @@ const ProjectDetail = () => {
     try {
       await request(`/projects/${id}`, {
         method: 'PUT',
-        data: values,
+        data: {
+          config: {
+            ...project.config,  // 保留其他配置
+            prompt: values.prompt
+          }
+        }
       });
       message.success('更新成功');
       fetchProject();
@@ -166,7 +171,7 @@ const ProjectDetail = () => {
         <Form
           form={form}
           onFinish={handleUpdatePrompt}
-          initialValues={{ prompt: project?.prompt }}
+          initialValues={{ prompt: project?.config?.prompt }}
           layout="vertical"
         >
           <Form.Item

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, message, Popconfirm, Switch } from 'antd';
+import { Table, Button, Modal, Form, Input, message, Popconfirm, Switch, Select } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
 
@@ -32,7 +32,16 @@ const ArticleType = () => {
   };
 
   const handleEdit = (record) => {
-    form.setFieldsValue(record);
+    form.setFieldsValue({
+      name: record.name,
+      is_public: record.is_public,
+      prompt: record.config?.prompt || '',
+      format_prompt: record.config?.format_prompt || '',
+      review_criteria: record.config?.review_criteria || [],
+      min_words: record.config?.min_words || 0,
+      max_words: record.config?.max_words || 0,
+      language: record.config?.language || 'zh'
+    });
     setEditingId(record.id);
     setModalVisible(true);
   };
@@ -50,11 +59,24 @@ const ArticleType = () => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+      const formData = {
+        name: values.name,
+        is_public: values.is_public,
+        config: {
+          prompt: values.prompt || '',
+          format_prompt: values.format_prompt || '',
+          review_criteria: values.review_criteria || [],
+          min_words: values.min_words || 0,
+          max_words: values.max_words || 0,
+          language: values.language || 'zh',
+        }
+      };
+
       if (editingId) {
-        await request.put(`/article-types/${editingId}`, values);
+        await request.put(`/article-types/${editingId}`, formData);
         message.success('更新成功');
       } else {
-        await request.post('/article-types', values);
+        await request.post('/article-types', formData);
         message.success('添加成功');
       }
       setModalVisible(false);
@@ -124,12 +146,24 @@ const ArticleType = () => {
         loading={loading}
       />
       <Modal
-        title={editingId ? '编辑文章类型' : '添加文章类型'}
+        title={editingId ? '编辑文章类型' : '新建文章类型'}
         open={modalVisible}
         onOk={handleSubmit}
-        onCancel={() => setModalVisible(false)}
+        onCancel={() => {
+          setModalVisible(false);
+          form.resetFields();
+          setEditingId(null);
+        }}
+        width={800}
       >
-        <Form form={form} layout="vertical">
+        <Form
+          form={form}
+          layout="vertical"
+          initialValues={{
+            is_public: false,
+            language: 'zh'
+          }}
+        >
           <Form.Item
             name="name"
             label="类型名称"
@@ -139,17 +173,65 @@ const ArticleType = () => {
           </Form.Item>
 
           <Form.Item
-            name="is_public"
-            label="是否公开"
+            name="prompt"
+            label="审阅提示词"
+            rules={[{ required: true, message: '请输入提示词' }]}
+            help="设定AI审阅时的主要提示词，将被项目继承"
           >
-            <Switch />
+            <Input.TextArea rows={6} />
           </Form.Item>
 
           <Form.Item
-            name="prompt"
-            label="prompt"
+            name="format_prompt"
+            label="格式化提示词"
+            help="用于规范AI输出格式的提示词"
           >
-            <Input.TextArea />
+            <Input.TextArea rows={4} />
+          </Form.Item>
+
+          <Form.Item
+            name="review_criteria"
+            label="评审标准"
+            help="设置具体的评审标准和要求"
+          >
+            <Input.TextArea rows={4} />
+          </Form.Item>
+
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <Form.Item
+              name="min_words"
+              label="最小字数"
+              style={{ flex: 1 }}
+            >
+              <Input type="number" min={0} />
+            </Form.Item>
+
+            <Form.Item
+              name="max_words"
+              label="最大字数"
+              style={{ flex: 1 }}
+            >
+              <Input type="number" min={0} />
+            </Form.Item>
+
+            <Form.Item
+              name="language"
+              label="语言"
+              style={{ flex: 1 }}
+            >
+              <Select>
+                <Select.Option value="zh">中文</Select.Option>
+                <Select.Option value="en">English</Select.Option>
+              </Select>
+            </Form.Item>
+          </div>
+
+          <Form.Item
+            name="is_public"
+            label="是否公开"
+            valuePropName="checked"
+          >
+            <Switch />
           </Form.Item>
         </Form>
       </Modal>

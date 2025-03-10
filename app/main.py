@@ -169,7 +169,7 @@ async def create_article_type(
     db_article_type = models.ArticleType(
         name=article_type.name,
         is_public=article_type.is_public,
-        prompt=article_type.prompt,
+        config=article_type.config or {},  # 使用提供的config或空对象
         owner_id=current_user.id
     )
     db.add(db_article_type)
@@ -204,8 +204,12 @@ async def update_article_type(
     if db_article_type.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to update this article type")
     
-    db_article_type.name = article_type.name
-    db_article_type.prompt = article_type.prompt
+    if article_type.name is not None:
+        db_article_type.name = article_type.name
+    if article_type.config is not None:
+        # 直接更新整个config对象
+        db_article_type.config = article_type.config
+    
     db.commit()
     db.refresh(db_article_type)
     return db_article_type
@@ -475,10 +479,10 @@ async def create_project(
     else:
         project_name = project.name
     
-    # 创建project，从article_type复制prompt
+    # 创建project，从article_type继承config
     db_project = models.Project(
         name=project_name,
-        prompt=article_type.prompt,
+        config=article_type.config,  # 继承article_type的config
         auto_approve=project.auto_approve,
         owner_id=current_user.id,
         article_type_id=project.article_type_id
@@ -528,8 +532,11 @@ async def update_project(
     
     if project.name is not None:
         db_project.name = project.name
-    if project.prompt is not None:
-        db_project.prompt = project.prompt
+    if project.config is not None:
+        # 如果配置字段存在，则合并配置
+        current_config = db_project.config or {}
+        current_config.update(project.config)
+        db_project.config = current_config
     if project.auto_approve is not None:
         db_project.auto_approve = project.auto_approve
     

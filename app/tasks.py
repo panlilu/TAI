@@ -186,8 +186,11 @@ def process_with_llm(article_id: int, job_id: int):
         processed_text = ai_review.processed_attachment_text
         # 使用LLM处理文章内容
         try:
-            # 获取项目提示词
-            prompt = project.prompt
+            # 从config中获取提示词
+            prompt = project.config.get('prompt', '')
+            if not prompt:
+                raise Exception("No prompt configured in project")
+
             model = os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
 
             # 使用litellm的流式API
@@ -226,6 +229,109 @@ def process_with_llm(article_id: int, job_id: int):
                     db.commit()
 
             # 完成处理
+            job.progress = 100
+            job.status = JobStatus.COMPLETED
+            ai_review.status = "completed"
+            
+        except Exception as e:
+            job.status = JobStatus.FAILED
+            job.logs += f"\nError during LLM processing: {str(e)}"
+            ai_review.status = "failed"
+            raise
+
+        db.commit()
+        return job
+
+    except Exception as e:
+        job.status = JobStatus.FAILED
+        job.logs += f"\nError: {str(e)}"
+        db.commit()
+        raise
+
+    finally:
+        db.close()
+
+def process_ai_review(article_id: int, job_id: int):
+    """处理文章内容并生成完整的AI审阅报告"""
+    db = SessionLocal()
+    try:
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            raise Exception("Job not found")
+            
+        # 更新任务状态
+        job.status = JobStatus.PROCESSING
+        job.progress = 0
+        db.commit()
+
+        # 获取文章、项目和AI审阅报告
+        article = db.query(Article).filter(Article.id == article_id).first()
+        if not article:
+            raise Exception("Article not found")
+
+        project = db.query(Project).filter(Project.id == article.project_id).first()
+        if not project:
+            raise Exception("Project not found")
+
+        ai_review = db.query(AIReviewReport).filter(
+            AIReviewReport.article_id == article_id
+        ).first()
+
+        if not ai_review or not ai_review.processed_attachment_text:
+            raise Exception("No processed text found. Please run convert_to_markdown first.")
+        
+        processed_text = ai_review.processed_attachment_text
+        
+        # 处理配置信息
+        config = project.config or {}
+        main_prompt = config.get('prompt', '')
+        format_prompt = config.get('format_prompt', '')
+        review_criteria = config.get('review_criteria', [])
+        min_words = config.get('min_words', 0)
+        max_words = config.get('max_words', 0)
+        language = config.get('language', 'zh')
+
+        if not main_prompt:
+            raise Exception("No prompt configured in project")
+
+        # 构建完整的提示词
+        full_prompt = main_prompt
+        if format_prompt:
+            full_prompt += f"\n\n输出格式要求：\n{format_prompt}"
+        if review_criteria:
+            full_prompt += f"\n\n评审标准：\n{review_criteria}"
+        if min_words or max_words:
+            full_prompt += f"\n\n字数要求：{min_words}-{max_words}字"
+        
+        try:
+            model = os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
+            response = completion(
+                model=model,
+                messages=[
+                    {"role": "system", "content": full_prompt},
+                    {"role": "user", "content": processed_text}
+                ],
+                stream=True
+            )
+
+            accumulated_response = ""
+            for chunk in response:
+                if not check_job_status(db, job):
+                    return
+
+                if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        accumulated_response += content
+                        ai_review.source_data = accumulated_response
+                        db.commit()
+
+                current_length = len(accumulated_response)
+                if current_length > 0:
+                    progress = min(95, int((current_length / 1000) * 5))
+                    job.progress = progress
+                    db.commit()
+
             job.progress = 100
             job.status = JobStatus.COMPLETED
             ai_review.status = "completed"
