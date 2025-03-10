@@ -54,7 +54,7 @@ class TokenData(BaseModel):
 class ArticleTypeBase(BaseModel):
     name: str
     is_public: bool
-    prompt: str
+    config: Dict[str, Any] | None = None
 
 class ArticleTypeCreate(ArticleTypeBase):
     pass
@@ -69,7 +69,7 @@ class ArticleType(ArticleTypeBase):
 
 class ArticleTypeUpdate(BaseModel):
     name: Optional[str] = None
-    prompt: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
 
 # 附件相关模型
 class AttachmentSchema(BaseModel):
@@ -144,7 +144,7 @@ class AIReviewReportUpdate(BaseModel):
 # 项目相关模型
 class ProjectBase(BaseModel):
     name: str
-    prompt: str
+    config: Dict[str, Any] | None = None
     auto_approve: bool = True
 
 class ProjectCreate(BaseModel):
@@ -163,7 +163,7 @@ class Project(ProjectBase):
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
-    prompt: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
     auto_approve: Optional[bool] = None
 
 # Job相关模型

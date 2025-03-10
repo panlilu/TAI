@@ -23,7 +23,7 @@ class ArticleType(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)  # 文章类型名称
     is_public = Column(Boolean, default=False)  # 是否为公共类型
-    prompt = Column(String, default="")  # 审核用的prompt
+    config = Column(JSON, nullable=False, server_default='{}')  # 配置信息，包含prompt等
     owner_id = Column(Integer, ForeignKey("users.id"))  # 创建者ID
     
     owner = relationship("User", back_populates="article_types")
@@ -36,6 +36,7 @@ class Article(Base):
     name = Column(String, index=True)  # 文章名称
     attachments = Column(JSON)  # 附件列表
     article_type_id = Column(Integer, ForeignKey("article_types.id"))  # 文章类型ID
+    json_result = Column(JSON, nullable=False, server_default='{}')  # AI审阅结果
     project_id = Column(Integer, ForeignKey("projects.id"))  # 项目ID
     created_at = Column(DateTime(timezone=True), server_default=func.now())  # 创建时间
     
@@ -64,7 +65,7 @@ class Project(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)  # 项目名称
-    prompt = Column(String, default="")  # 审核用的prompt
+    config = Column(JSON, nullable=False, server_default='{}')  # 配置信息，包含prompt等
     auto_approve = Column(Boolean, default=True)  # 是否自动审批
     owner_id = Column(Integer, ForeignKey("users.id"))  # 创建者ID
     article_type_id = Column(Integer, ForeignKey("article_types.id"))  # 基于的文章类型ID
