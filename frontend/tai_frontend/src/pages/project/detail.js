@@ -15,29 +15,28 @@ const ProjectDetail = () => {
   const [uploading, setUploading] = useState(false);
   const [articleType, setArticleType] = useState(null);
   const [form] = Form.useForm();
+  const [settingsForm] = Form.useForm();  // 为项目设置添加单独的 form 实例
 
   // 使用useCallback来缓存函数
   const fetchProject = useCallback(async () => {
     try {
       const response = await request(`/projects/${id}`);
       setProject(response);
+      settingsForm.setFieldsValue({
+        name: response.name,
+        auto_approve: response.auto_approve,
+        prompt: response.config?.prompt || '',
+        format_prompt: response.config?.format_prompt || '',
+        review_criteria: response.config?.review_criteria || '',
+        language: response.config?.language || 'zh'
+      });
       form.setFieldsValue({
         prompt: response.config?.prompt || '',
       });
-      
-      // // 获取文章类型信息
-      // if (response.article_type_id) {
-      //   try {
-      //     const articleTypeResponse = await request(`/article-types/${response.article_type_id}`);
-      //     setArticleType(articleTypeResponse);
-      //   } catch (error) {
-      //     console.error('获取文章类型失败', error);
-      //   }
-      // }
     } catch (error) {
       message.error('获取项目详情失败');
     }
-  }, [id, form]);
+  }, [id, form, settingsForm]);
 
   const fetchArticles = useCallback(async () => {
     try {
@@ -182,21 +181,12 @@ const ProjectDetail = () => {
       return <div>加载中...</div>;
     }
     
-    const initialValues = {
-      name: project.name,
-      auto_approve: project.auto_approve,
-      prompt: project.config?.prompt || '',
-      format_prompt: project.config?.format_prompt || '',
-      review_criteria: project.config?.review_criteria || '',
-      language: project.config?.language || 'zh'
-    };
-    
     return (
       <Card title="项目设定" bordered={false}>
         <Form
+          form={settingsForm}
           layout="vertical"
           onFinish={handleUpdateSettings}
-          initialValues={initialValues}
         >
           <Form.Item
             name="name"
