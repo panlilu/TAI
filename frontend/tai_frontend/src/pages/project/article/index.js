@@ -100,8 +100,14 @@ const ArticleViewer = () => {
   const handleConvertToMarkdown = async () => {
     try {
       const response = await request.post(`/jobs`, {
-        task: 'convert_to_markdown',
-        article_id: articleId
+        project_id: parseInt(projectId),
+        name: `转换文章 #${articleId} 为Markdown`,
+        tasks: [
+          {
+            task_type: 'convert_to_markdown',
+            article_id: parseInt(articleId)
+          }
+        ]
       });
       message.success('已创建转换任务，请稍后查看任务状态');
     } catch (error) {
@@ -113,8 +119,14 @@ const ArticleViewer = () => {
     try {
       setIsAiProcessing(true);
       const response = await request.post('/jobs', {
-        task: 'process_with_llm',
-        article_id: articleId
+        project_id: parseInt(projectId),
+        name: `AI审阅文章 #${articleId}`,
+        tasks: [
+          {
+            task_type: 'process_with_llm',
+            article_id: parseInt(articleId)
+          }
+        ]
       });
       message.success('已创建AI处理任务，请稍后在AI审阅报告标签页查看进度');
       

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Table, Button, Input, Form, Upload, message, Tabs, Space } from 'antd';
-import { UploadOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Input, Form, Upload, message, Tabs, Space, Descriptions, Tag, Select, Switch } from 'antd';
+import { UploadOutlined, EyeOutlined, DeleteOutlined, SettingOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
 import config from '../../config';
 
@@ -13,6 +13,7 @@ const ProjectDetail = () => {
   const [project, setProject] = useState(null);
   const [articles, setArticles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [articleType, setArticleType] = useState(null);
   const [form] = Form.useForm();
 
   // 使用useCallback来缓存函数
@@ -23,6 +24,16 @@ const ProjectDetail = () => {
       form.setFieldsValue({
         prompt: response.config?.prompt || '',
       });
+      
+      // // 获取文章类型信息
+      // if (response.article_type_id) {
+      //   try {
+      //     const articleTypeResponse = await request(`/article-types/${response.article_type_id}`);
+      //     setArticleType(articleTypeResponse);
+      //   } catch (error) {
+      //     console.error('获取文章类型失败', error);
+      //   }
+      // }
     } catch (error) {
       message.error('获取项目详情失败');
     }
@@ -142,6 +153,140 @@ const ProjectDetail = () => {
     },
   ];
 
+  // 更新项目设置
+  const handleUpdateSettings = async (values) => {
+    try {
+      await request(`/projects/${id}`, {
+        method: 'PUT',
+        data: {
+          name: values.name,
+          config: {
+            prompt: values.prompt,
+            format_prompt: values.format_prompt,
+            review_criteria: values.review_criteria,
+            language: values.language || 'zh',
+          },
+          auto_approve: values.auto_approve
+        }
+      });
+      message.success('更新成功');
+      fetchProject();
+    } catch (error) {
+      message.error('更新失败');
+    }
+  };
+
+  // 渲染项目设定
+  const renderProjectSettings = () => {
+    if (!project) {
+      return <div>加载中...</div>;
+    }
+    
+    const initialValues = {
+      name: project.name,
+      auto_approve: project.auto_approve,
+      prompt: project.config?.prompt || '',
+      format_prompt: project.config?.format_prompt || '',
+      review_criteria: project.config?.review_criteria || '',
+      language: project.config?.language || 'zh'
+    };
+    
+    return (
+      <Card title="项目设定" bordered={false}>
+        <Form
+          layout="vertical"
+          onFinish={handleUpdateSettings}
+          initialValues={initialValues}
+        >
+          <Form.Item
+            name="name"
+            label="项目名称"
+            rules={[{ required: true, message: '请输入项目名称' }]}
+          >
+            <Input />
+          </Form.Item>
+
+          <Form.Item
+            name="prompt"
+            label={
+              <span>
+                提示词
+                {articleType?.config?.prompt && (
+                  <Tag color="blue" style={{ marginLeft: 8 }}>可继承</Tag>
+                )}
+              </span>
+            }
+            help="如果不设置，将使用文章类型中的提示词"
+          >
+            <Input.TextArea rows={6} />
+          </Form.Item>
+
+          <Form.Item
+            name="format_prompt"
+            label={
+              <span>
+                格式化提示词
+                {articleType?.config?.format_prompt && (
+                  <Tag color="blue" style={{ marginLeft: 8 }}>可继承</Tag>
+                )}
+              </span>
+            }
+            help="如果不设置，将使用文章类型中的格式化提示词"
+          >
+            <Input.TextArea rows={4} />
+          </Form.Item>
+
+          <Form.Item
+            name="review_criteria"
+            label="评审标准"
+            help="设置具体的评审标准和要求"
+          >
+            <Input.TextArea rows={4} />
+          </Form.Item>
+
+          <Form.Item
+            name="language"
+            label="语言"
+          >
+            <Select>
+              <Select.Option value="zh">中文</Select.Option>
+              <Select.Option value="en">English</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="auto_approve"
+            valuePropName="checked"
+            label="自动批准"
+          >
+            <Switch />
+          </Form.Item>
+
+          {articleType && (
+            <div style={{ marginBottom: 16 }}>
+              <h3>文章类型: {articleType.name}</h3>
+              {articleType.config && (
+                <Descriptions bordered column={1} size="small" style={{ marginTop: 8 }}>
+                  {articleType.config?.min_words > 0 || articleType.config?.max_words > 0 ? (
+                    <Descriptions.Item label="字数限制">
+                      {articleType.config?.min_words || 0} - {articleType.config?.max_words || '∞'}
+                    </Descriptions.Item>
+                  ) : null}
+                </Descriptions>
+              )}
+            </div>
+          )}
+
+          <Form.Item>
+            <Button type="primary" htmlType="submit">
+              保存设置
+            </Button>
+          </Form.Item>
+        </Form>
+      </Card>
+    );
+  };
+
   const items = [
     {
       key: '1',
@@ -187,6 +332,11 @@ const ProjectDetail = () => {
           </Form.Item>
         </Form>
       )
+    },
+    {
+      key: '3',
+      label: '项目设定',
+      children: renderProjectSettings()
     }
   ];
 

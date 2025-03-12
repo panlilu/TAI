@@ -296,18 +296,26 @@ const Jobs = () => {
       title: '并行度',
       dataIndex: 'parallelism',
       key: 'parallelism',
-      render: (parallelism, record) => (
-        <Tooltip title="设置任务并行度">
-          <InputNumber
-            min={1}
-            max={10}
-            defaultValue={parallelism || 1}
-            onChange={(value) => handleUpdateParallelism(record.id, value)}
-            addonAfter={<SettingOutlined />}
-            style={{ width: '100px' }}
-          />
-        </Tooltip>
-      )
+      render: (parallelism, record) => {
+        // 对于已完成、失败或已取消的任务，只显示并行度值，不提供编辑功能
+        if (['completed', 'failed', 'cancelled'].includes(record.status)) {
+          return <span>{parallelism || 1}</span>;
+        }
+        
+        // 对于其他状态的任务，显示可编辑的并行度控件
+        return (
+          <Tooltip title="设置任务并行度">
+            <InputNumber
+              min={1}
+              max={10}
+              defaultValue={parallelism || 1}
+              onChange={(value) => handleUpdateParallelism(record.id, value)}
+              addonAfter={<SettingOutlined />}
+              style={{ width: '100px' }}
+            />
+          </Tooltip>
+        );
+      }
     },
     {
       title: '子任务数',
