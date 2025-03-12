@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, message, Space, Progress } from 'antd';
+import { Table, Button, message, Space, Progress, Collapse, Tag, InputNumber, Tooltip } from 'antd';
 import { 
   ReloadOutlined, 
   PauseCircleOutlined, 
   PlayCircleOutlined,
-  StopOutlined
+  StopOutlined,
+  DownOutlined,
+  RightOutlined,
+  SettingOutlined
 } from '@ant-design/icons';
 import request from '../../utils/request';
+
+const { Panel } = Collapse;
 
 const Jobs = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [expandedRowKeys, setExpandedRowKeys] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -30,33 +36,63 @@ const Jobs = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleRetry = async (id) => {
+  const handleRetry = async (id, taskId = null) => {
     try {
-      await request.post(`/jobs/${id}/action`, { action: 'retry' });
-      message.success('重试任务成功');
+      if (taskId) {
+        await request.post(`/jobs/${id}/tasks/${taskId}/action`, { action: 'retry' });
+        message.success('重试子任务成功');
+      } else {
+        await request.post(`/jobs/${id}/action`, { action: 'retry' });
+        message.success('重试任务成功');
+      }
       fetchData();
     } catch (error) {
       message.error('重试任务失败');
     }
   };
 
-  const handlePause = async (id) => {
+  const handlePause = async (id, taskId = null) => {
     try {
-      await request.post(`/jobs/${id}/action`, { action: 'pause' });
-      message.success('暂停任务成功');
+      if (taskId) {
+        await request.post(`/jobs/${id}/tasks/${taskId}/action`, { action: 'pause' });
+        message.success('暂停子任务成功');
+      } else {
+        await request.post(`/jobs/${id}/action`, { action: 'pause' });
+        message.success('暂停任务成功');
+      }
       fetchData();
     } catch (error) {
       message.error('暂停任务失败');
     }
   };
 
-  const handleResume = async (id) => {
+  const handleResume = async (id, taskId = null) => {
     try {
-      await request.post(`/jobs/${id}/action`, { action: 'resume' });
-      message.success('启动任务成功');
+      if (taskId) {
+        await request.post(`/jobs/${id}/tasks/${taskId}/action`, { action: 'resume' });
+        message.success('启动子任务成功');
+      } else {
+        await request.post(`/jobs/${id}/action`, { action: 'resume' });
+        message.success('启动任务成功');
+      }
       fetchData();
     } catch (error) {
       message.error('启动任务失败');
+    }
+  };
+
+  const handleCancel = async (id, taskId = null) => {
+    try {
+      if (taskId) {
+        await request.post(`/jobs/${id}/tasks/${taskId}/action`, { action: 'cancel' });
+        message.success('取消子任务成功');
+      } else {
+        await request.post(`/jobs/${id}/action`, { action: 'cancel' });
+        message.success('取消任务成功');
+      }
+      fetchData();
+    } catch (error) {
+      message.error('取消任务失败');
     }
   };
 
@@ -70,46 +106,219 @@ const Jobs = () => {
     }
   };
 
+  const handleUpdateParallelism = async (id, value) => {
+    try {
+      await request.put(`/jobs/${id}`, { parallelism: value });
+      message.success('更新并行度成功');
+      fetchData();
+    } catch (error) {
+      message.error('更新并行度失败');
+    }
+  };
+
+  const getStatusTag = (status) => {
+    const statusMap = {
+      pending: { text: '等待中', color: 'gold' },
+      processing: { text: '运行中', color: 'blue' },
+      completed: { text: '已完成', color: 'green' },
+      failed: { text: '失败', color: 'red' },
+      paused: { text: '已暂停', color: 'orange' },
+      cancelled: { text: '已取消', color: 'gray' }
+    };
+    
+    const statusInfo = statusMap[status] || { text: status, color: 'default' };
+    return <Tag color={statusInfo.color}>{statusInfo.text}</Tag>;
+  };
+
+  const getTaskTypeText = (taskType) => {
+    const taskTypeMap = {
+      process_upload: '处理上传',
+      convert_to_markdown: '转换为Markdown',
+      process_with_llm: 'LLM处理',
+      process_ai_review: 'AI审阅'
+    };
+    return taskTypeMap[taskType] || taskType;
+  };
+
+  const expandRow = (record) => {
+    const newExpandedRowKeys = [...expandedRowKeys];
+    const index = newExpandedRowKeys.indexOf(record.id);
+    if (index > -1) {
+      newExpandedRowKeys.splice(index, 1);
+    } else {
+      newExpandedRowKeys.push(record.id);
+    }
+    setExpandedRowKeys(newExpandedRowKeys);
+  };
+
+  const renderTasksTable = (tasks) => {
+    const taskColumns = [
+      {
+        title: 'ID',
+        dataIndex: 'id',
+        key: 'id',
+        width: 60
+      },
+      {
+        title: '任务类型',
+        dataIndex: 'task_type',
+        key: 'task_type',
+        render: (taskType) => getTaskTypeText(taskType)
+      },
+      {
+        title: '状态',
+        dataIndex: 'status',
+        key: 'status',
+        render: (status) => getStatusTag(status)
+      },
+      {
+        title: '进度',
+        dataIndex: 'progress',
+        key: 'progress',
+        render: (progress) => (
+          <Progress percent={progress} size="small" />
+        )
+      },
+      {
+        title: '操作',
+        key: 'action',
+        render: (_, task) => (
+          <Space>
+            {task.status === 'failed' && (
+              <Button
+                type="link"
+                size="small"
+                icon={<ReloadOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRetry(task.job_id, task.id);
+                }}
+              >
+                重试
+              </Button>
+            )}
+            {task.status === 'processing' && (
+              <Button
+                type="link"
+                size="small"
+                icon={<PauseCircleOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handlePause(task.job_id, task.id);
+                }}
+              >
+                暂停
+              </Button>
+            )}
+            {task.status === 'paused' && (
+              <Button
+                type="link"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleResume(task.job_id, task.id);
+                }}
+              >
+                启动
+              </Button>
+            )}
+            {(task.status === 'pending' || task.status === 'processing' || task.status === 'paused') && (
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<StopOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCancel(task.job_id, task.id);
+                }}
+              >
+                取消
+              </Button>
+            )}
+          </Space>
+        )
+      }
+    ];
+
+    return (
+      <Table
+        columns={taskColumns}
+        dataSource={tasks}
+        rowKey="id"
+        pagination={false}
+        size="small"
+      />
+    );
+  };
+
   const columns = [
+    {
+      title: '',
+      key: 'expand',
+      width: 50,
+      render: (_, record) => (
+        <Button
+          type="text"
+          icon={expandedRowKeys.includes(record.id) ? <DownOutlined /> : <RightOutlined />}
+          onClick={() => expandRow(record)}
+        />
+      )
+    },
     {
       title: 'ID',
       dataIndex: 'id',
-      key: 'id'
+      key: 'id',
+      width: 60
     },
     {
       title: '任务名称',
-      dataIndex: 'task',
-      key: 'task',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name, record) => name || `任务 #${record.id}`
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (status) => {
-        const statusMap = {
-          pending: '等待中',
-          running: '运行中',
-          completed: '已完成',
-          failed: '失败',
-          paused: '已暂停',
-          cancelled: '已取消'
-        };
-        return statusMap[status] || status;
-      },
+      render: (status) => getStatusTag(status)
     },
     {
       title: '进度',
       dataIndex: 'progress',
       key: 'progress',
       render: (progress) => (
-        <Progress percent={Math.round(progress * 100)} size="small" />
-      ),
+        <Progress percent={progress} size="small" />
+      )
+    },
+    {
+      title: '并行度',
+      dataIndex: 'parallelism',
+      key: 'parallelism',
+      render: (parallelism, record) => (
+        <Tooltip title="设置任务并行度">
+          <InputNumber
+            min={1}
+            max={10}
+            defaultValue={parallelism || 1}
+            onChange={(value) => handleUpdateParallelism(record.id, value)}
+            addonAfter={<SettingOutlined />}
+            style={{ width: '100px' }}
+          />
+        </Tooltip>
+      )
+    },
+    {
+      title: '子任务数',
+      key: 'taskCount',
+      render: (_, record) => record.tasks?.length || 0
     },
     {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (time) => new Date(time).toLocaleString(),
+      render: (time) => new Date(time).toLocaleString()
     },
     {
       title: '操作',
@@ -126,7 +335,7 @@ const Jobs = () => {
               重试
             </Button>
           )}
-          {record.status === 'running' && (
+          {record.status === 'processing' && (
             <Button
               type="link"
               icon={<PauseCircleOutlined />}
@@ -144,9 +353,19 @@ const Jobs = () => {
               启动
             </Button>
           )}
+          {(record.status === 'pending' || record.status === 'processing' || record.status === 'paused') && (
+            <Button
+              type="link"
+              danger
+              icon={<StopOutlined />}
+              onClick={() => handleCancel(record.id)}
+            >
+              取消
+            </Button>
+          )}
         </Space>
-      ),
-    },
+      )
+    }
   ];
 
   return (
@@ -166,6 +385,12 @@ const Jobs = () => {
         rowKey="id"
         scroll={{ x: 'max-content' }}
         loading={loading}
+        expandedRowKeys={expandedRowKeys}
+        expandable={{
+          expandedRowRender: (record) => renderTasksTable(record.tasks || []),
+          expandRowByClick: false,
+          expandIcon: () => null
+        }}
       />
     </div>
   );

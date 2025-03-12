@@ -75,16 +75,35 @@ class Project(Base):
     articles = relationship("Article", back_populates="project")
     jobs = relationship("Job", back_populates="project")
 
+class JobTask(Base):
+    __tablename__ = "job_tasks"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
+    task_type = Column(SQLAlchemyEnum(JobTaskType), nullable=False)
+    status = Column(SQLAlchemyEnum(JobStatus), nullable=False)
+    progress = Column(Integer, nullable=True)
+    logs = Column(Text, nullable=True)
+    article_id = Column(Integer, ForeignKey("articles.id"), nullable=True)
+    params = Column(JSON, nullable=True)  # 存储任务参数
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    job = relationship("Job", back_populates="tasks")
+    article = relationship("Article")
+
 class Job(Base):
     __tablename__ = "jobs"
     
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    task = Column(SQLAlchemyEnum(JobTaskType), nullable=False)
+    name = Column(String, nullable=True)  # 任务名称
     status = Column(SQLAlchemyEnum(JobStatus), nullable=False)
     progress = Column(Integer, nullable=True)
     logs = Column(Text, nullable=True)
+    parallelism = Column(Integer, default=1)  # 并行度设置
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     project = relationship("Project", back_populates="jobs")
+    tasks = relationship("JobTask", back_populates="job", cascade="all, delete-orphan")

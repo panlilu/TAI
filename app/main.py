@@ -328,21 +328,36 @@ async def create_article_review(
     # 创建job记录
     db_job = models.Job(
         project_id=article.project_id,
-        task="process_ai_review",
+        name=f"AI Review for Article #{article_id}",
         status=schemas.JobStatus.PENDING,
         progress=0,
-        logs=""
+        logs="",
+        parallelism=1
     )
     db.add(db_job)
     db.commit()
     db.refresh(db_job)
     
-    # 将任务加入队列
+    # 创建任务记录
+    db_task = models.JobTask(
+        job_id=db_job.id,
+        task_type=schemas.JobTaskType.PROCESS_AI_REVIEW,
+        status=schemas.JobStatus.PENDING,
+        progress=0,
+        logs="",
+        article_id=article_id
+    )
+    db.add(db_task)
+    db.commit()
+    
+    # 调度任务
     task_queue.enqueue(
-        tasks.process_ai_review,
-        args=(article_id, db_job.id)
+        tasks.schedule_job_tasks,
+        args=(db_job.id,)
     )
     
+    # 刷新job以获取关联的tasks
+    db.refresh(db_job)
     return db_job
 
 @api_app.delete("/articles", tags=["Article Management"])
@@ -567,13 +582,6 @@ async def create_job(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    # 如果提供了article_id，从article获取project_id
-    if job.article_id:
-        article = db.query(models.Article).filter(models.Article.id == job.article_id).first()
-        if not article:
-            raise HTTPException(status_code=404, detail="Article not found")
-        job.project_id = article.project_id
-
     # 检查project是否存在且属于当前用户
     if job.project_id:
         project = db.query(models.Project).filter(
@@ -582,42 +590,56 @@ async def create_job(
         ).first()
         if not project:
             raise HTTPException(status_code=404, detail="Project not found or not authorized")
+    else:
+        raise HTTPException(status_code=400, detail="Project ID is required")
     
     # 创建job记录
     db_job = models.Job(
         project_id=job.project_id,
-        task=job.task,
+        name=job.name,
         status=schemas.JobStatus.PENDING,
         progress=0,
-        logs=""
+        logs="",
+        parallelism=job.parallelism or 1
     )
     db.add(db_job)
     db.commit()
     db.refresh(db_job)
     
-    # 根据任务类型将任务加入队列
-    if job.task == schemas.JobTaskType.CONVERT_TO_MARKDOWN:
-        if not job.article_id:
-            raise HTTPException(status_code=400, detail="Article ID is required for convert_to_markdown task")
-        task_queue.enqueue(
-            tasks.convert_to_markdown,
-            args=(job.article_id, db_job.id)
+    # 创建任务记录
+    for task_create in job.tasks:
+        # 如果提供了article_id，检查文章是否存在
+        if task_create.article_id:
+            article = db.query(models.Article).filter(models.Article.id == task_create.article_id).first()
+            if not article:
+                raise HTTPException(status_code=404, detail=f"Article {task_create.article_id} not found")
+            
+            # 检查文章是否属于该项目
+            if article.project_id != job.project_id:
+                raise HTTPException(status_code=400, detail=f"Article {task_create.article_id} does not belong to project {job.project_id}")
+        
+        # 创建任务
+        db_task = models.JobTask(
+            job_id=db_job.id,
+            task_type=task_create.task_type,
+            status=schemas.JobStatus.PENDING,
+            progress=0,
+            logs="",
+            article_id=task_create.article_id,
+            params=task_create.params
         )
-    elif job.task == schemas.JobTaskType.PROCESS_WITH_LLM:
-        if not job.article_id:
-            raise HTTPException(status_code=400, detail="Article ID is required for process_with_llm task")
-        task_queue.enqueue(
-            tasks.process_with_llm,
-            args=(job.article_id, db_job.id)
-        )
-    elif job.task == schemas.JobTaskType.PROCESS_UPLOAD:
-        if not job.project_id:
-            raise HTTPException(status_code=400, detail="Project ID is required for process_upload task")
-        raise HTTPException(
-            status_code=400, 
-            detail="For upload tasks, please use the /jobs_upload endpoint"
-        )
+        db.add(db_task)
     
+    db.commit()
+    
+    # 调度任务
+    task_queue.enqueue(
+        tasks.schedule_job_tasks,
+        args=(db_job.id,)
+    )
+    
+    # 刷新job以获取关联的tasks
+    db.refresh(db_job)
     return db_job
 
 # 上传文件任务
@@ -625,6 +647,8 @@ async def create_job(
 async def create_upload_job(
     project_id: int,
     file: UploadFile = File(...),
+    parallelism: int = 1,
+    name: Optional[str] = None,
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -639,10 +663,11 @@ async def create_upload_job(
     # 创建job记录
     db_job = models.Job(
         project_id=project_id,
-        task="process_upload",
+        name=name or f"Upload {file.filename}",
         status=schemas.JobStatus.PENDING,
         progress=0,
-        logs=""
+        logs="",
+        parallelism=parallelism
     )
     db.add(db_job)
     db.commit()
@@ -657,12 +682,29 @@ async def create_upload_job(
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
     
-    # 将任务添加到队列中
+    # 创建任务记录
+    db_task = models.JobTask(
+        job_id=db_job.id,
+        task_type=schemas.JobTaskType.PROCESS_UPLOAD,
+        status=schemas.JobStatus.PENDING,
+        progress=0,
+        logs="",
+        params={
+            "file_path": file_path,
+            "project_id": project_id
+        }
+    )
+    db.add(db_task)
+    db.commit()
+    
+    # 调度任务
     task_queue.enqueue(
-        tasks.process_upload,
-        args=(str(db_job.id), file_path, project_id)
+        tasks.schedule_job_tasks,
+        args=(db_job.id,)
     )
     
+    # 刷新job以获取关联的tasks
+    db.refresh(db_job)
     return db_job
 
 @api_app.get("/jobs", response_model=List[schemas.Job], tags=["Job Management"])
@@ -735,84 +777,224 @@ async def job_action(
     if not project:
         raise HTTPException(status_code=403, detail="Not authorized to perform action on this job")
     
+    # 如果指定了task_id，则操作特定任务
+    if action.task_id:
+        return await task_action(job_id, action.task_id, action, current_user, db)
+    
     # 处理不同的操作
     if action.action == schemas.JobAction.PAUSE:
-        if job.status != schemas.JobStatus.PROCESSING:
-            raise HTTPException(status_code=400, detail="Can only pause processing jobs")
+        # 暂停所有正在处理的任务
+        tasks_to_pause = db.query(models.JobTask).filter(
+            models.JobTask.job_id == job_id,
+            models.JobTask.status == schemas.JobStatus.PROCESSING
+        ).all()
+        
+        if not tasks_to_pause:
+            raise HTTPException(status_code=400, detail="No processing tasks to pause")
+        
+        for task in tasks_to_pause:
+            task.status = schemas.JobStatus.PAUSED
+        
         job.status = schemas.JobStatus.PAUSED
     
     elif action.action == schemas.JobAction.RESUME:
-        if job.status != schemas.JobStatus.PAUSED:
-            raise HTTPException(status_code=400, detail="Can only resume paused jobs")
-        job.status = schemas.JobStatus.PROCESSING
-         # 重新根据任务类型加入队列
-        if job.task == schemas.JobTaskType.PROCESS_UPLOAD:
-            file_path = f"uploads/{current_user.id}/{job.id}"
-            task_queue.enqueue(
-                tasks.process_upload,
-                args=(str(job.id), file_path, job.project_id)
-            )
-        else:
-            # 其他任务类型需要关联文章
-            article = db.query(models.Article).filter(
-                models.Article.project_id == job.project_id
-            ).first()
-            if not article:
-                raise HTTPException(status_code=404, detail="Associated article not found")
-            
-            if job.task == schemas.JobTaskType.CONVERT_TO_MARKDOWN:
-                task_queue.enqueue(
-                    tasks.convert_to_markdown,
-                    args=(article.id, job.id)
-                )
-            elif job.task == schemas.JobTaskType.PROCESS_WITH_LLM:
-                task_queue.enqueue(
-                    tasks.process_with_llm,
-                    args=(article.id, job.id)
-                )
+        # 恢复所有暂停的任务
+        tasks_to_resume = db.query(models.JobTask).filter(
+            models.JobTask.job_id == job_id,
+            models.JobTask.status == schemas.JobStatus.PAUSED
+        ).all()
+        
+        if not tasks_to_resume:
+            raise HTTPException(status_code=400, detail="No paused tasks to resume")
+        
+        for task in tasks_to_resume:
+            task.status = schemas.JobStatus.PENDING
+        
+        job.status = schemas.JobStatus.PENDING
+        
+        # 调度任务
+        task_queue.enqueue(
+            tasks.schedule_job_tasks,
+            args=(job_id,)
+        )
     
     elif action.action == schemas.JobAction.CANCEL:
-        if job.status in [schemas.JobStatus.COMPLETED, schemas.JobStatus.FAILED, schemas.JobStatus.CANCELLED]:
-            raise HTTPException(status_code=400, detail="Cannot cancel completed, failed or cancelled jobs")
+        # 取消所有未完成的任务
+        tasks_to_cancel = db.query(models.JobTask).filter(
+            models.JobTask.job_id == job_id,
+            models.JobTask.status.in_([
+                schemas.JobStatus.PENDING,
+                schemas.JobStatus.PROCESSING,
+                schemas.JobStatus.PAUSED
+            ])
+        ).all()
+        
+        if not tasks_to_cancel:
+            raise HTTPException(status_code=400, detail="No active tasks to cancel")
+        
+        for task in tasks_to_cancel:
+            task.status = schemas.JobStatus.CANCELLED
+        
         job.status = schemas.JobStatus.CANCELLED
     
     elif action.action == schemas.JobAction.RETRY:
-        if job.status not in [schemas.JobStatus.COMPLETED, schemas.JobStatus.FAILED, schemas.JobStatus.CANCELLED]:
-            raise HTTPException(status_code=400, detail="Can only retry completed, failed or cancelled jobs")
+        # 重试所有失败或取消的任务
+        tasks_to_retry = db.query(models.JobTask).filter(
+            models.JobTask.job_id == job_id,
+            models.JobTask.status.in_([
+                schemas.JobStatus.FAILED,
+                schemas.JobStatus.CANCELLED
+            ])
+        ).all()
+        
+        if not tasks_to_retry:
+            raise HTTPException(status_code=400, detail="No failed or cancelled tasks to retry")
+        
+        for task in tasks_to_retry:
+            task.status = schemas.JobStatus.PENDING
+            task.progress = 0
+            task.logs = ""
         
         job.status = schemas.JobStatus.PENDING
         job.progress = 0
-        job.logs = ""
         
-         # 根据任务类型重新加入队列
-        if job.task == schemas.JobTaskType.PROCESS_UPLOAD:
-            file_path = f"uploads/{current_user.id}/{job.id}"
-            task_queue.enqueue(
-                tasks.process_upload,
-                args=(str(job.id), file_path, job.project_id)
-            )
-        else:
-            # For other task types, need to get the associated article
-            article = db.query(models.Article).filter(
-                models.Article.project_id == job.project_id
-            ).first()
-            if not article:
-                raise HTTPException(status_code=404, detail="Associated article not found")
-            
-            if job.task == schemas.JobTaskType.CONVERT_TO_MARKDOWN:
-                task_queue.enqueue(
-                    tasks.convert_to_markdown,
-                    args=(article.id, job.id)
-                )
-            elif job.task == schemas.JobTaskType.PROCESS_WITH_LLM:
-                task_queue.enqueue(
-                    tasks.process_with_llm,
-                    args=(article.id, job.id)
-                )
+        # 调度任务
+        task_queue.enqueue(
+            tasks.schedule_job_tasks,
+            args=(job_id,)
+        )
     
     db.commit()
     db.refresh(job)
     return job
+
+@api_app.post("/jobs/{job_id}/tasks/{task_id}/action", response_model=schemas.Job, tags=["Job Management"])
+async def task_action(
+    job_id: int,
+    task_id: int,
+    action: schemas.JobActionRequest,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # 检查项目是否属于当前用户
+    project = db.query(models.Project).filter(
+        models.Project.id == job.project_id,
+        models.Project.owner_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=403, detail="Not authorized to perform action on this job")
+    
+    # 获取任务
+    task = db.query(models.JobTask).filter(
+        models.JobTask.id == task_id,
+        models.JobTask.job_id == job_id
+    ).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # 处理不同的操作
+    if action.action == schemas.JobAction.PAUSE:
+        if task.status != schemas.JobStatus.PROCESSING:
+            raise HTTPException(status_code=400, detail="Can only pause processing tasks")
+        task.status = schemas.JobStatus.PAUSED
+    
+    elif action.action == schemas.JobAction.RESUME:
+        if task.status != schemas.JobStatus.PAUSED:
+            raise HTTPException(status_code=400, detail="Can only resume paused tasks")
+        task.status = schemas.JobStatus.PENDING
+        
+        # 调度任务
+        task_queue.enqueue(
+            tasks.execute_task,
+            args=(task_id,)
+        )
+    
+    elif action.action == schemas.JobAction.CANCEL:
+        if task.status in [schemas.JobStatus.COMPLETED, schemas.JobStatus.FAILED, schemas.JobStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail="Cannot cancel completed, failed or cancelled tasks")
+        task.status = schemas.JobStatus.CANCELLED
+    
+    elif action.action == schemas.JobAction.RETRY:
+        if task.status not in [schemas.JobStatus.COMPLETED, schemas.JobStatus.FAILED, schemas.JobStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail="Can only retry completed, failed or cancelled tasks")
+        
+        task.status = schemas.JobStatus.PENDING
+        task.progress = 0
+        task.logs = ""
+        
+        # 调度任务
+        task_queue.enqueue(
+            tasks.execute_task,
+            args=(task_id,)
+        )
+    
+    db.commit()
+    
+    # 更新Job状态
+    tasks.update_job_status(db, job_id)
+    
+    db.refresh(job)
+    return job
+
+@api_app.get("/jobs/{job_id}/tasks", response_model=List[schemas.JobTask], tags=["Job Management"])
+async def get_job_tasks(
+    job_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 检查Job是否存在且属于当前用户
+    job = db.query(models.Job).join(
+        models.Project,
+        models.Job.project_id == models.Project.id
+    ).filter(
+        models.Job.id == job_id,
+        models.Project.owner_id == current_user.id
+    ).first()
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found or not authorized")
+    
+    # 获取所有任务
+    tasks = db.query(models.JobTask).filter(
+        models.JobTask.job_id == job_id
+    ).all()
+    
+    return tasks
+
+@api_app.get("/jobs/{job_id}/tasks/{task_id}", response_model=schemas.JobTask, tags=["Job Management"])
+async def get_job_task(
+    job_id: int,
+    task_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 检查Job是否存在且属于当前用户
+    job = db.query(models.Job).join(
+        models.Project,
+        models.Job.project_id == models.Project.id
+    ).filter(
+        models.Job.id == job_id,
+        models.Project.owner_id == current_user.id
+    ).first()
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found or not authorized")
+    
+    # 获取任务
+    task = db.query(models.JobTask).filter(
+        models.JobTask.id == task_id,
+        models.JobTask.job_id == job_id
+    ).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return task
 
 @api_app.post("/jobs/cancel-all", tags=["Job Management"])
 async def cancel_all_jobs(
@@ -900,11 +1082,17 @@ async def job_events(
 
             if recent_jobs:
                 for job in recent_jobs:
+                    # 获取任务的第一个子任务类型（如果有）
+                    first_task = db.query(models.JobTask).filter(
+                        models.JobTask.job_id == job.id
+                    ).first()
+                    
                     data = {
                         "id": job.id,
+                        "name": job.name,
                         "status": job.status,
                         "progress": job.progress,
-                        "task": job.task
+                        "task_type": first_task.task_type if first_task else None
                     }
                     yield f"data: {json.dumps(data)}\n\n"
             

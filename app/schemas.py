@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, computed_field, field_serializer, model_serializer
-from typing import Optional, Literal, Dict, Any
+from typing import Optional, Literal, Dict, Any, List
 from enum import Enum
 
 class UserRole(str, Enum):
@@ -166,23 +166,60 @@ class ProjectUpdate(BaseModel):
     config: Optional[Dict[str, Any]] = None
     auto_approve: Optional[bool] = None
 
-# Job相关模型
-class JobBase(BaseModel):
-    task: str
+# JobTask相关模型
+class JobTaskBase(BaseModel):
+    task_type: JobTaskType
     status: JobStatus
     progress: Optional[int] = None
     logs: Optional[str] = None
+    article_id: Optional[int] = None
+    params: Optional[Dict[str, Any]] = None
+
+class JobTaskCreate(BaseModel):
+    task_type: JobTaskType
+    article_id: Optional[int] = None
+    params: Optional[Dict[str, Any]] = None
+
+class JobTask(JobTaskBase):
+    id: int
+    job_id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = {
+        "from_attributes": True
+    }
+
+    @field_serializer('created_at', 'updated_at')
+    def serialize_datetime(self, dt: datetime) -> str:
+        return dt.isoformat() if dt else None
+
+class JobTaskUpdate(BaseModel):
+    status: Optional[JobStatus] = None
+    progress: Optional[int] = None
+    logs: Optional[str] = None
+    params: Optional[Dict[str, Any]] = None
+
+# Job相关模型
+class JobBase(BaseModel):
+    name: Optional[str] = None
+    status: JobStatus
+    progress: Optional[int] = None
+    logs: Optional[str] = None
+    parallelism: Optional[int] = 1
 
 class JobCreate(BaseModel):
     project_id: Optional[int] = None
-    task: JobTaskType
-    article_id: Optional[int] = None
+    name: Optional[str] = None
+    parallelism: Optional[int] = 1
+    tasks: List[JobTaskCreate]
 
 class Job(JobBase):
     id: int
     project_id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    tasks: List[JobTask] = []
 
     model_config = {
         "from_attributes": True
@@ -193,18 +230,23 @@ class Job(JobBase):
         return {
             "id": self.id,
             "project_id": self.project_id,
-            "task": self.task,
+            "name": self.name,
             "status": self.status,
             "progress": self.progress,
             "logs": self.logs,
+            "parallelism": self.parallelism,
+            "tasks": [task for task in self.tasks],
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
 
 class JobUpdate(BaseModel):
+    name: Optional[str] = None
     status: Optional[JobStatus] = None
     progress: Optional[int] = None
     logs: Optional[str] = None
+    parallelism: Optional[int] = None
 
 class JobActionRequest(BaseModel):
     action: JobAction
+    task_id: Optional[int] = None  # 可选，指定要操作的特定任务ID
