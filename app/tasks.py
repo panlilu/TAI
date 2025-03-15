@@ -13,6 +13,7 @@ from PIL import Image
 import pytesseract
 from litellm import completion
 import json
+import tomli
 from .file_converter import convert_file_to_markdown
 from redis import Redis
 from rq import Queue
@@ -23,6 +24,52 @@ ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp'}
 # 创建Redis连接和队列
 redis_conn = Redis()
 task_queue = Queue(connection=redis_conn)
+
+# 加载模型配置
+def load_model_config():
+    """加载模型配置文件"""
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'model_config.toml')
+    try:
+        with open(config_path, 'rb') as f:
+            return tomli.load(f)
+    except Exception as e:
+        print(f"Error loading model config: {str(e)}")
+        return {"models": [], "tasks": {}}
+
+# 全局模型配置
+MODEL_CONFIG = load_model_config()
+
+# 获取任务可用的模型列表
+def get_available_models_for_task(task_type):
+    """获取特定任务类型可用的模型列表"""
+    task_config = MODEL_CONFIG.get("tasks", {}).get(task_type, {})
+    return task_config.get("available_models", [])
+
+# 获取任务的默认模型
+def get_default_model_for_task(task_type):
+    """获取特定任务类型的默认模型"""
+    task_config = MODEL_CONFIG.get("tasks", {}).get(task_type, {})
+    default_model = task_config.get("default_model", "")
+    if not default_model and task_config.get("available_models"):
+        return task_config["available_models"][0]
+    return default_model or os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
+
+# 获取任务的默认配置
+def get_task_default_config(task_type):
+    """获取特定任务类型的默认配置"""
+    task_config = MODEL_CONFIG.get("tasks", {}).get(task_type, {})
+    return task_config.get("default_config", {})
+
+# 获取任务配置
+def get_task_config(task_type, project_config):
+    """获取特定任务类型的配置，合并项目配置和默认配置"""
+    default_config = get_task_default_config(task_type)
+    project_task_config = project_config.get("tasks", {}).get(task_type, {})
+    
+    # 合并配置，项目配置优先级更高
+    merged_config = default_config.copy()
+    merged_config.update(project_task_config)
+    return merged_config
 
 def is_allowed_file(filename: str) -> bool:
     """检查文件是否为允许的类型"""
@@ -334,16 +381,28 @@ def process_with_llm_task(task_id: int, article_id: int):
             if not prompt:
                 raise Exception("No prompt configured in project")
 
-            model = os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
+            # 获取任务特定的配置
+            task_config = get_task_config('process_with_llm', project.config)
+            
+            # 从任务配置中获取模型
+            model = task_config.get('model')
+            if not model:
+                model = get_default_model_for_task('process_with_llm')
+                
+            # 检查模型是否在可用列表中
+            available_models = get_available_models_for_task('process_with_llm')
+            if available_models and model not in available_models:
+                model = available_models[0] if available_models else "deepseek/deepseek-chat"
 
-            # 使用litellm的流式API
+            # 使用litellm的流式API，包含任务特定的配置
             response = completion(
                 model=model,
                 messages=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": processed_text}
                 ],
-                stream=True  # 启用流式输出
+                stream=True,  # 启用流式输出
+                **{k: v for k, v in task_config.items() if k != 'model'}  # 排除model字段，添加其他配置
             )
 
             # 初始化累积的响应文本
@@ -447,14 +506,28 @@ def process_ai_review_task(task_id: int, article_id: int):
             full_prompt += f"\n\n字数要求：{min_words}-{max_words}字"
         
         try:
-            model = os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
+            # 获取任务特定的配置
+            task_config = get_task_config('ai_review', project.config)
+            
+            # 从任务配置中获取模型
+            model = task_config.get('model')
+            if not model:
+                model = get_default_model_for_task('ai_review')
+                
+            # 检查模型是否在可用列表中
+            available_models = get_available_models_for_task('ai_review')
+            if available_models and model not in available_models:
+                model = available_models[0] if available_models else "deepseek/deepseek-reason"
+                
+            # 使用litellm的流式API，包含任务特定的配置
             response = completion(
                 model=model,
                 messages=[
                     {"role": "system", "content": full_prompt},
                     {"role": "user", "content": processed_text}
                 ],
-                stream=True
+                stream=True,
+                **{k: v for k, v in task_config.items() if k != 'model'}  # 排除model字段，添加其他配置
             )
 
             accumulated_response = ""
@@ -582,6 +655,53 @@ def process_upload_task(task_id: int, file_path: str, project_id: int):
             )
             db.add(db_article)
             db.commit()
+            db.refresh(db_article)
+            
+            # 如果项目设置了自动批阅，则为新文章创建批阅任务
+            if project.auto_approve:
+                # 创建一个新的Job
+                review_job = Job(
+                    project_id=project_id,
+                    name=f"Auto Review for {file}",
+                    status=JobStatus.PENDING,
+                    progress=0,
+                    logs="",
+                    parallelism=1
+                )
+                db.add(review_job)
+                db.commit()
+                db.refresh(review_job)
+                
+                # 创建convert_to_markdown任务
+                convert_task = JobTask(
+                    job_id=review_job.id,
+                    task_type=JobTaskType.CONVERT_TO_MARKDOWN,
+                    status=JobStatus.PENDING,
+                    progress=0,
+                    logs="",
+                    article_id=db_article.id
+                )
+                db.add(convert_task)
+                
+                # 创建process_with_llm任务
+                llm_task = JobTask(
+                    job_id=review_job.id,
+                    task_type=JobTaskType.PROCESS_WITH_LLM,
+                    status=JobStatus.PENDING,
+                    progress=0,
+                    logs="",
+                    article_id=db_article.id
+                )
+                db.add(llm_task)
+                db.commit()
+                
+                # 调度任务
+                task_queue.enqueue(
+                    schedule_job_tasks,
+                    args=(review_job.id,)
+                )
+                
+                print(f"Auto review job {review_job.id} created for article {db_article.id}")
             
             # 更新进度
             progress = int((index + 1) / total_files * 100)
@@ -736,3 +856,17 @@ def process_upload(job_id, file_path, project_id):
         raise
     finally:
         db.close()
+
+# 获取模型详细信息
+def get_model_details(model_id):
+    """获取模型的详细信息"""
+    models = MODEL_CONFIG.get("models", [])
+    for model in models:
+        if model.get("id") == model_id:
+            return model
+    return {"id": model_id, "name": model_id, "description": ""}
+
+# 获取所有可用模型
+def get_all_available_models():
+    """获取所有配置的模型列表"""
+    return MODEL_CONFIG.get("models", [])

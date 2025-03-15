@@ -1,10 +1,10 @@
 from datetime import timedelta
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File, APIRouter
 from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from datetime import datetime
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -495,9 +495,29 @@ async def create_project(
         project_name = project.name
     
     # 创建project，从article_type继承config
+    project_config = article_type.config or {}
+    
+    # 如果项目配置中没有tasks字段，添加默认的任务配置
+    if "tasks" not in project_config:
+        project_config["tasks"] = {}
+    
+    # 如果提供了新的配置，合并它
+    if project.config:
+        # 合并tasks配置
+        if "tasks" in project.config:
+            for task_type, task_config in project.config["tasks"].items():
+                if task_type not in project_config["tasks"]:
+                    project_config["tasks"][task_type] = {}
+                project_config["tasks"][task_type].update(task_config)
+        
+        # 合并其他配置
+        for key, value in project.config.items():
+            if key != "tasks":
+                project_config[key] = value
+    
     db_project = models.Project(
         name=project_name,
-        config=article_type.config,  # 继承article_type的config
+        config=project_config,  # 使用合并后的配置
         auto_approve=project.auto_approve,
         owner_id=current_user.id,
         article_type_id=project.article_type_id
@@ -550,7 +570,23 @@ async def update_project(
     if project.config is not None:
         # 如果配置字段存在，则合并配置
         current_config = db_project.config or {}
-        current_config.update(project.config)
+        
+        # 确保tasks字段存在
+        if "tasks" not in current_config:
+            current_config["tasks"] = {}
+        
+        # 合并tasks配置
+        if "tasks" in project.config:
+            for task_type, task_config in project.config["tasks"].items():
+                if task_type not in current_config["tasks"]:
+                    current_config["tasks"][task_type] = {}
+                current_config["tasks"][task_type].update(task_config)
+        
+        # 合并其他配置
+        for key, value in project.config.items():
+            if key != "tasks":
+                current_config[key] = value
+        
         db_project.config = current_config
     if project.auto_approve is not None:
         db_project.auto_approve = project.auto_approve
@@ -1169,4 +1205,48 @@ async def ai_review_events(
         event_generator(),
         media_type="text/event-stream"
     )
+
+# 添加模型配置相关的API端点
+@api_app.get("/models", tags=["Model Configuration"])
+async def get_models(
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """获取所有可用的模型配置"""
+    return tasks.get_all_available_models()
+
+@api_app.get("/models/{model_id}", tags=["Model Configuration"])
+async def get_model_details(
+    model_id: str,
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """获取特定模型的详细信息"""
+    model_details = tasks.get_model_details(model_id)
+    if not model_details:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return model_details
+
+@api_app.get("/tasks/{task_type}/models", tags=["Model Configuration"])
+async def get_task_models(
+    task_type: str,
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """获取特定任务类型可用的模型列表"""
+    available_models = tasks.get_available_models_for_task(task_type)
+    if not available_models:
+        return []
+    
+    # 获取每个模型的详细信息
+    models_with_details = []
+    for model_id in available_models:
+        model_details = tasks.get_model_details(model_id)
+        models_with_details.append(model_details)
+    
+    return models_with_details
+
+@api_app.get("/model-config", tags=["Model Configuration"])
+async def get_model_config(
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """获取完整的模型配置"""
+    return tasks.MODEL_CONFIG
 
