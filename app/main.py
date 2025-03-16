@@ -502,7 +502,7 @@ async def create_project(
         project_config["tasks"] = {}
     
     # 如果提供了新的配置，合并它
-    if project.config:
+    if getattr(project, 'config', None):
         # 合并tasks配置
         if "tasks" in project.config:
             for task_type, task_config in project.config["tasks"].items():
@@ -607,6 +607,8 @@ async def delete_project(
     if db_project.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this project")
     
+    # 删除项目，级联删除所有关联的文章、任务和AI审阅报告
+    # 通过在models.py中设置cascade="all, delete-orphan"实现
     db.delete(db_project)
     db.commit()
     return {"message": "Project deleted successfully"}

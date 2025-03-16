@@ -42,7 +42,7 @@ class Article(Base):
     
     article_type = relationship("ArticleType", back_populates="articles")
     project = relationship("Project", back_populates="articles")
-    ai_reviews = relationship("AIReviewReport", back_populates="article")
+    ai_reviews = relationship("AIReviewReport", back_populates="article", cascade="all, delete-orphan")
 
 class AIReviewReport(Base):
     __tablename__ = "ai_review_reports"
@@ -72,8 +72,8 @@ class Project(Base):
     
     owner = relationship("User", back_populates="projects")
     article_type = relationship("ArticleType")
-    articles = relationship("Article", back_populates="project")
-    jobs = relationship("Job", back_populates="project")
+    articles = relationship("Article", back_populates="project", cascade="all, delete-orphan")
+    jobs = relationship("Job", back_populates="project", cascade="all, delete-orphan")
 
 class JobTask(Base):
     __tablename__ = "job_tasks"
