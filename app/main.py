@@ -1250,5 +1250,51 @@ async def get_model_config(
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
     """获取完整的模型配置"""
-    return tasks.MODEL_CONFIG
+    return tasks.get_model_config()
+
+@api_app.get("/user/stats", response_model=schemas.UserStats, tags=["User Management"])
+async def get_user_stats(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 获取用户的文章数量
+    article_count = db.query(models.Article).join(
+        models.Project
+    ).filter(
+        models.Project.owner_id == current_user.id
+    ).count()
+    
+    # 获取用户的项目数量
+    project_count = db.query(models.Project).filter(
+        models.Project.owner_id == current_user.id
+    ).count()
+    
+    # 获取用户的文章类型数量
+    article_type_count = db.query(models.ArticleType).filter(
+        (models.ArticleType.is_public == True) | 
+        (models.ArticleType.owner_id == current_user.id)
+    ).count()
+    
+    # 获取用户的任务总数
+    total_jobs = db.query(models.Job).join(
+        models.Project
+    ).filter(
+        models.Project.owner_id == current_user.id
+    ).count()
+    
+    # 获取用户的进行中任务数量
+    active_jobs = db.query(models.Job).join(
+        models.Project
+    ).filter(
+        models.Project.owner_id == current_user.id,
+        models.Job.status.in_([schemas.JobStatus.PENDING, schemas.JobStatus.PROCESSING])
+    ).count()
+    
+    return {
+        "article_count": article_count,
+        "project_count": project_count,
+        "article_type_count": article_type_count,
+        "total_jobs": total_jobs,
+        "active_jobs": active_jobs
+    }
 

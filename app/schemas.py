@@ -250,3 +250,10 @@ class JobUpdate(BaseModel):
 class JobActionRequest(BaseModel):
     action: JobAction
     task_id: Optional[int] = None  # 可选，指定要操作的特定任务ID
+
+class UserStats(BaseModel):
+    article_count: int
+    project_count: int
+    article_type_count: int
+    total_jobs: int
+    active_jobs: int

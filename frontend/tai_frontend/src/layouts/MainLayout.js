@@ -7,6 +7,7 @@ import {
   FileTextOutlined,
   ScheduleOutlined,
   ProjectOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -19,11 +20,11 @@ const MainLayout = ({ children }) => {
   const userRole = localStorage.getItem('userRole');
 
   const menuItems = [
-    // {
-    //   key: '/dashboard',
-    //   icon: <DashboardOutlined />,
-    //   label: '仪表盘',
-    // },
+    {
+      key: '/dashboard',
+      icon: <DashboardOutlined />,
+      label: '仪表盘',
+    },
     {
       key: '/review-wizard',
       icon: <ProjectOutlined />,
