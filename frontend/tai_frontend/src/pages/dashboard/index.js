@@ -88,15 +88,6 @@ const Dashboard = () => {
           </Card>
         </Col>
       </Row>
-      <Row style={{ marginTop: 24 }}>
-        <Col span={24}>
-          <Card title="系统信息">
-            <p>欢迎使用TAI管理系统</p>
-            <p>当前版本：1.0.0</p>
-            <p>上次更新：2024-03-21</p>
-          </Card>
-        </Col>
-      </Row>
     </div>
   );
 };
