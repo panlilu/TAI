@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, message, Popconfirm, Switch, Select } from 'antd';
+import { Table, Button, Modal, Form, Input, message, Popconfirm, Switch, Select, InputNumber, Collapse } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
+
+const { Panel } = Collapse;
 
 const ArticleType = () => {
   const [data, setData] = useState([]);
@@ -9,6 +11,9 @@ const ArticleType = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [form] = Form.useForm();
   const [editingId, setEditingId] = useState(null);
+  const [availableModels, setAvailableModels] = useState([]);
+  const [aiReviewModels, setAiReviewModels] = useState([]);
+  const [processWithLlmModels, setProcessWithLlmModels] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -21,8 +26,27 @@ const ArticleType = () => {
     setLoading(false);
   };
 
+  const fetchModels = async () => {
+    try {
+      // 获取所有可用模型
+      const allModels = await request.get('/models');
+      setAvailableModels(allModels);
+
+      // 获取AI审阅任务可用的模型
+      const aiReviewModelsData = await request.get('/tasks/ai_review/models');
+      setAiReviewModels(aiReviewModelsData);
+
+      // 获取LLM处理任务可用的模型
+      const processModelsData = await request.get('/tasks/process_with_llm/models');
+      setProcessWithLlmModels(processModelsData);
+    } catch (error) {
+      message.error('获取模型配置失败');
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchModels();
   }, []);
 
   const handleAdd = () => {
@@ -40,7 +64,16 @@ const ArticleType = () => {
       review_criteria: record.config?.review_criteria || [],
       min_words: record.config?.min_words || 0,
       max_words: record.config?.max_words || 0,
-      language: record.config?.language || 'zh'
+      language: record.config?.language || 'zh',
+      // LLM配置
+      ai_review_model: record.config?.ai_review_model || '',
+      ai_review_temperature: record.config?.ai_review_temperature || 0.3,
+      ai_review_max_tokens: record.config?.ai_review_max_tokens || 4000,
+      ai_review_top_p: record.config?.ai_review_top_p || 0.9,
+      process_model: record.config?.process_model || '',
+      process_temperature: record.config?.process_temperature || 0.7,
+      process_max_tokens: record.config?.process_max_tokens || 2000,
+      process_top_p: record.config?.process_top_p || 0.95,
     });
     setEditingId(record.id);
     setModalVisible(true);
@@ -69,6 +102,15 @@ const ArticleType = () => {
           min_words: values.min_words || 0,
           max_words: values.max_words || 0,
           language: values.language || 'zh',
+          // LLM配置
+          ai_review_model: values.ai_review_model || '',
+          ai_review_temperature: values.ai_review_temperature || 0.3,
+          ai_review_max_tokens: values.ai_review_max_tokens || 4000,
+          ai_review_top_p: values.ai_review_top_p || 0.9,
+          process_model: values.process_model || '',
+          process_temperature: values.process_temperature || 0.7,
+          process_max_tokens: values.process_max_tokens || 2000,
+          process_top_p: values.process_top_p || 0.95,
         }
       };
 
@@ -161,7 +203,13 @@ const ArticleType = () => {
           layout="vertical"
           initialValues={{
             is_public: false,
-            language: 'zh'
+            language: 'zh',
+            ai_review_temperature: 0.3,
+            ai_review_max_tokens: 4000,
+            ai_review_top_p: 0.9,
+            process_temperature: 0.7,
+            process_max_tokens: 2000,
+            process_top_p: 0.95,
           }}
         >
           <Form.Item
@@ -225,6 +273,98 @@ const ArticleType = () => {
               </Select>
             </Form.Item>
           </div>
+
+          <Collapse style={{ marginBottom: 16 }}>
+            <Panel header="AI审阅模型配置" key="ai_review">
+              <Form.Item
+                name="ai_review_model"
+                label="AI审阅模型"
+                help="选择用于AI审阅任务的模型"
+              >
+                <Select placeholder="选择模型">
+                  {aiReviewModels.map(model => (
+                    <Select.Option key={model.id} value={model.id}>
+                      {model.name} - {model.description}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <Form.Item
+                  name="ai_review_temperature"
+                  label="温度"
+                  style={{ flex: 1 }}
+                  help="控制输出的随机性，值越低越确定"
+                >
+                  <InputNumber min={0} max={1} step={0.1} />
+                </Form.Item>
+
+                <Form.Item
+                  name="ai_review_max_tokens"
+                  label="最大Token数"
+                  style={{ flex: 1 }}
+                  help="生成文本的最大长度"
+                >
+                  <InputNumber min={100} max={8000} step={100} />
+                </Form.Item>
+
+                <Form.Item
+                  name="ai_review_top_p"
+                  label="Top P"
+                  style={{ flex: 1 }}
+                  help="控制输出的多样性"
+                >
+                  <InputNumber min={0} max={1} step={0.05} />
+                </Form.Item>
+              </div>
+            </Panel>
+
+            <Panel header="文本处理模型配置" key="process_llm">
+              <Form.Item
+                name="process_model"
+                label="文本处理模型"
+                help="选择用于文本处理任务的模型"
+              >
+                <Select placeholder="选择模型">
+                  {processWithLlmModels.map(model => (
+                    <Select.Option key={model.id} value={model.id}>
+                      {model.name} - {model.description}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <Form.Item
+                  name="process_temperature"
+                  label="温度"
+                  style={{ flex: 1 }}
+                  help="控制输出的随机性，值越低越确定"
+                >
+                  <InputNumber min={0} max={1} step={0.1} />
+                </Form.Item>
+
+                <Form.Item
+                  name="process_max_tokens"
+                  label="最大Token数"
+                  style={{ flex: 1 }}
+                  help="生成文本的最大长度"
+                >
+                  <InputNumber min={100} max={8000} step={100} />
+                </Form.Item>
+
+                <Form.Item
+                  name="process_top_p"
+                  label="Top P"
+                  style={{ flex: 1 }}
+                  help="控制输出的多样性"
+                >
+                  <InputNumber min={0} max={1} step={0.05} />
+                </Form.Item>
+              </div>
+            </Panel>
+          </Collapse>
 
           <Form.Item
             name="is_public"

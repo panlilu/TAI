@@ -26,6 +26,16 @@ prompt='''
 根据这个论文标准评价一下这篇论文
 '''
 
+format_prompt = '''
+请按照以下格式输出评审结果：
+
+1. 论文总体评价（200-300字）
+2. 优点（列出3-5点）
+3. 不足（列出2-4点）
+4. 改进建议（针对不足给出具体建议）
+5. 最终评分（百分制）
+'''
+
 def seed_database():
     Base.metadata.create_all(bind=engine)
     
@@ -46,11 +56,32 @@ def seed_database():
     
     # 检查是否已存在文章类型
     if not db.query(ArticleType).filter(ArticleType.name == "毕业论文s").first():
-        # 创建文章类型
+        # 创建文章类型，添加LLM任务相关的配置
         article_type = ArticleType(
             name="毕业论文s",
             is_public=True,
-            config={"prompt": prompt},
+            config={
+                "prompt": prompt,
+                "format_prompt": format_prompt,
+                "review_criteria": "论文结构完整性、内容深度、创新性、实用价值、语言表达",
+                "min_words": 5000,
+                "max_words": 15000,
+                "language": "zh",
+                "tasks": {
+                    "process_with_llm": {
+                        "model": "deepseek/deepseek-chat",
+                        "temperature": 0.7,
+                        "max_tokens": 2000,
+                        "top_p": 0.95
+                    },
+                    "ai_review": {
+                        "model": "deepseek/deepseek-reason",
+                        "temperature": 0.3,
+                        "max_tokens": 4000,
+                        "top_p": 0.9
+                    }
+                }
+            },
             owner_id=1  # 假设admin用户的ID为1
         )
         db.add(article_type)
