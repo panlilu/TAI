@@ -57,7 +57,35 @@ const MainLayout = ({ children }) => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider trigger={null} collapsible collapsed={collapsed}>
-        <div style={{ height: 32, margin: 16, background: 'rgba(255, 255, 255, 0.2)' }} />
+        <div className="logo-container" style={{ 
+          height: '64px', 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center',
+          padding: '16px',
+          background: '#001529'
+        }}>
+          {collapsed ? (
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="6" y="5" width="20" height="22" rx="2" stroke="#1890ff" strokeWidth="2" fill="#001529"/>
+              <path d="M10 10H22" stroke="#1890ff" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M10 14H22" stroke="#1890ff" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M10 18H18" stroke="#1890ff" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M10 22H16" stroke="#1890ff" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '8px' }}>
+                <rect x="6" y="5" width="20" height="22" rx="2" stroke="#1890ff" strokeWidth="2" fill="#001529"/>
+                <path d="M10 10H22" stroke="#1890ff" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M10 14H22" stroke="#1890ff" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M10 18H18" stroke="#1890ff" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M10 22H16" stroke="#1890ff" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <span style={{ color: '#fff', fontSize: '18px', fontWeight: 'bold' }}>TAI</span>
+            </div>
+          )}
+        </div>
         <Menu
           theme="dark"
           mode="inline"
