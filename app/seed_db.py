@@ -81,6 +81,43 @@ def seed_database():
                         "temperature": 0.3,
                         "max_tokens": 4000,
                         "top_p": 0.9
+                    },
+                    "extract_structured_data": {
+                        "model": "deepseek/deepseek-reason",
+                        "temperature": 0.2,
+                        "max_tokens": 3000,
+                        "top_p": 0.8,
+                        "extraction_prompt": """请从以下审阅报告中提取结构化数据，以YAML格式返回：
+
+1. 摘要
+2. 结构评分 (1-10)
+3. 内容完整性评分 (1-10)
+4. 语言表达评分 (1-10)
+5. 专业性评分 (1-10)
+6. 格式规范评分 (1-10)
+7. 总体评分 (1-10)
+8. 问题清单 (列表)
+9. 改进建议 (列表)
+
+使用以下YAML格式：
+
+```yaml
+summary: 简短摘要
+structure_score: 7
+completeness_score: 8
+language_score: 9
+professionalism_score: 7
+format_score: 8
+overall_score: 8
+issues:
+  - 第一个问题
+  - 第二个问题
+suggestions:
+  - 第一个建议
+  - 第二个建议
+```
+
+审阅报告:"""
                     }
                 }
             },

@@ -1240,8 +1240,11 @@ def extract_structured_data_task(task_id: int, article_id: int):
             db.commit()
             return
             
-        # 构建提取结构化数据的prompt
-        extraction_prompt = """请从以下审阅报告中提取结构化数据，以YAML格式返回：
+        # 获取任务特定的配置
+        task_config = get_task_config('extract_structured_data', project.config)
+        
+        # 从配置中获取提取提示词，如果没有则使用默认提示词
+        extraction_prompt = task_config.get('extraction_prompt', """请从以下审阅报告中提取结构化数据，以YAML格式返回：
 
 1. 摘要
 2. 结构评分 (1-10)
@@ -1272,12 +1275,9 @@ suggestions:
 ```
 
 审阅报告:
-"""
+""")
 
         try:
-            # 获取任务特定的配置
-            task_config = get_task_config('extract_structured_data', project.config)
-            
             # 从任务配置中获取模型
             model = task_config.get('model')
             if not model:
