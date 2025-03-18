@@ -139,7 +139,7 @@ const ReviewWizard = () => {
             multiple
             accept=".doc,.docx,.pdf"
           >
-            <Button icon={<UploadOutlined />}>选择文件（支持多选）</Button>
+            <Button icon={<UploadOutlined />}>上传文件</Button>
           </Upload>
         </Form.Item>
       ),
@@ -180,7 +180,12 @@ const ReviewWizard = () => {
       // 如果是第三步,上传文件
       if (current === 2) {
         const { file } = values;
-        await uploadFile(projectId, file[0].originFileObj);
+        const fileList = file || [];
+        
+        // 使用Promise.all同时上传多个文件
+        await Promise.all(fileList.map(fileItem => 
+          uploadFile(projectId, fileItem.originFileObj)
+        ));
       }
       setCurrent(current + 1);
     } catch (error) {

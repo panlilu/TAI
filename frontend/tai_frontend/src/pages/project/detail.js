@@ -92,6 +92,8 @@ const ProjectDetail = () => {
     headers: {
       Authorization: `Bearer ${localStorage.getItem('token')}`,
     },
+    multiple: true, // 添加多文件上传支持
+    accept: '.doc,.docx,.pdf,.txt,.md', // 添加文件类型限制
     onChange(info) {
       if (info.file.status === 'uploading') {
         setUploading(true);
