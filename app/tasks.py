@@ -199,9 +199,13 @@ def execute_task(task_id: int):
         if not task:
             raise ValueError(f"找不到任务ID {task_id}")
             
-        if task.status != JobStatus.PENDING:
-            logging.info(f"任务 {task_id} 不处于等待状态，当前状态: {task.status}")
+        if task.status != JobStatus.PENDING and task.status != JobStatus.PROCESSING:
+            logging.info(f"任务 {task_id} 不处于等待或处理状态，当前状态: {task.status}")
             return
+        
+        # 更新任务状态为处理中
+        task.status = JobStatus.PROCESSING
+        db.commit()
             
         if task.task_type == JobTaskType.CONVERT_TO_MARKDOWN:
             convert_to_markdown_task(task.id, task.article_id)
@@ -217,6 +221,9 @@ def execute_task(task_id: int):
             extract_structured_data_task(task.id, task.article_id)
         else:
             raise ValueError(f"未知的任务类型: {task.task_type}")
+        
+        # 任务执行完成后，立即调度下一个任务
+        task_queue.enqueue(schedule_job_tasks, args=(task.job_id,))
             
     except Exception as e:
         logging.error(f"执行任务 {task_id} 出错: {str(e)}")
@@ -224,12 +231,15 @@ def execute_task(task_id: int):
             {"status": JobStatus.FAILED, "logs": f"【错误】执行失败: {str(e)}"}
         )
         db.commit()
+        
+        # 即使任务失败，也调度下一个任务
+        task_queue.enqueue(schedule_job_tasks, args=(db.query(JobTask).filter(JobTask.id == task_id).first().job_id,))
         raise
     finally:
         db.close()
 
 def schedule_job_tasks(job_id: int):
-    """调度Job的所有任务，考虑并行度"""
+    """调度Job的所有任务，确保Job内部的任务按严格顺序执行"""
     db = SessionLocal()
     try:
         # 获取Job信息
@@ -237,45 +247,58 @@ def schedule_job_tasks(job_id: int):
         if not job:
             return
         
+        # 获取所有任务及其状态
+        all_tasks = db.query(JobTask).filter(JobTask.job_id == job_id).all()
+        
+        # 检查当前是否有任务正在处理中
+        processing_tasks = [t for t in all_tasks if t.status == JobStatus.PROCESSING]
+        if processing_tasks:
+            # 如果有任务正在处理中，等待它完成
+            print(f"Job {job_id} - 已有任务正在处理中，等待完成")
+            task_queue.enqueue_in(timedelta(seconds=15), schedule_job_tasks, args=(job_id,))
+            return
+        
         # 获取所有待处理的任务
-        pending_tasks = db.query(JobTask).filter(
-            JobTask.job_id == job_id,
-            JobTask.status == JobStatus.PENDING
-        ).all()
+        pending_tasks = [t for t in all_tasks if t.status == JobStatus.PENDING]
+        if not pending_tasks:
+            # 没有待处理的任务，检查任务是否全部完成
+            if all(t.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED] for t in all_tasks):
+                # 所有任务都已经完成、失败或取消
+                print(f"Job {job_id} - 所有任务已处理完成")
+                # 更新Job状态
+                update_job_status(db, job_id)
+            else:
+                # 可能有暂停的任务，15秒后再检查
+                task_queue.enqueue_in(timedelta(seconds=15), schedule_job_tasks, args=(job_id,))
+            return
         
-        # 获取当前正在处理的任务数量
-        processing_tasks_count = db.query(JobTask).filter(
-            JobTask.job_id == job_id,
-            JobTask.status == JobStatus.PROCESSING
-        ).count()
+        # 按照任务类型和创建时间排序，确保Markdown转换任务优先执行
+        # 首先，找出所有Markdown转换任务
+        markdown_tasks = [t for t in pending_tasks if t.task_type == JobTaskType.CONVERT_TO_MARKDOWN]
+        other_tasks = [t for t in pending_tasks if t.task_type != JobTaskType.CONVERT_TO_MARKDOWN]
         
-        # 计算可以启动的任务数量
-        available_slots = max(0, job.parallelism - processing_tasks_count)
-        
-        # 优先选择Markdown转换任务
-        markdown_tasks = [task for task in pending_tasks if task.task_type == JobTaskType.CONVERT_TO_MARKDOWN]
-        other_tasks = [task for task in pending_tasks if task.task_type != JobTaskType.CONVERT_TO_MARKDOWN]
-        
-        # 重新排序任务列表，确保Markdown转换任务优先执行
+        # 排序后的任务列表
         sorted_tasks = markdown_tasks + other_tasks
         
-        # 启动任务
-        scheduled_count = 0
-        for i in range(min(available_slots, len(sorted_tasks))):
-            task = sorted_tasks[i]
+        if sorted_tasks:
+            # 每次只执行一个任务，严格按顺序
+            next_task = sorted_tasks[0]
+            
             # 将任务加入队列
-            task_queue.enqueue(execute_task, args=(task.id,))
-            scheduled_count += 1
+            task_queue.enqueue(execute_task, args=(next_task.id,))
+            print(f"Job {job_id} - 调度任务 {next_task.id} 类型: {next_task.task_type}")
+            
+            # 更新任务状态
+            next_task.status = JobStatus.PROCESSING
+            db.commit()
         
-        # 检查Job是否完成
-        all_tasks = db.query(JobTask).filter(JobTask.job_id == job_id).all()
+        # 15秒后再次检查
+        task_queue.enqueue_in(timedelta(seconds=15), schedule_job_tasks, args=(job_id,))
+        
+        # 检查Job状态统计
         completed_count = sum(1 for t in all_tasks if t.status == JobStatus.COMPLETED)
         pending_or_processing_count = sum(1 for t in all_tasks if t.status in [JobStatus.PENDING, JobStatus.PROCESSING])
-        
-        # 如果还有待处理或处理中的任务，15秒后再次检查
-        if pending_or_processing_count > 0:
-            print(f"Job {job_id} - {completed_count} completed, {pending_or_processing_count} pending/processing")
-            task_queue.enqueue_in(timedelta(seconds=15), schedule_job_tasks, args=(job_id,))
+        print(f"Job {job_id} - {completed_count} 已完成, {pending_or_processing_count} 待处理/处理中")
             
         db.commit()
     except Exception as e:
@@ -290,24 +313,33 @@ def convert_to_markdown_task(task_id: int, article_id: int):
         # 获取任务信息
         task = db.query(JobTask).filter(JobTask.id == task_id).first()
         if not task:
-            return
+            raise Exception("Task not found")
             
-        # 更新任务状态为处理中
+        # 更新任务状态
         task.status = JobStatus.PROCESSING
-        task.logs = "【开始】开始转换文档为Markdown格式...\n"
+        task.progress = 0
+        task.logs = "【开始】开始将文章转换为Markdown格式...\n"
         db.commit()
-        
+
         # 获取文章信息
         article = db.query(Article).filter(Article.id == article_id).first()
         if not article:
             error_msg = f"错误：找不到文章ID {article_id}"
             task.logs += f"【错误】{error_msg}\n"
             raise Exception(error_msg)
-        
+
         task.logs += f"【信息】正在处理文章: {article.name}，ID: {article.id}\n"
         db.commit()
-        
-        # 处理激活的附件
+
+        # 检查文章是否有附件
+        if not article.attachments or len(article.attachments) == 0:
+            error_msg = "错误：文章没有附件"
+            task.logs += f"【错误】{error_msg}\n"
+            task.status = JobStatus.FAILED
+            db.commit()
+            return
+            
+        # 找到活动的附件
         active_attachment = None
         for attachment in article.attachments:
             if attachment.get("is_active"):
@@ -315,83 +347,114 @@ def convert_to_markdown_task(task_id: int, article_id: int):
                 break
                 
         if not active_attachment:
-            error_msg = "错误：未找到激活的附件"
+            error_msg = "错误：未找到活动的附件"
             task.logs += f"【错误】{error_msg}\n"
-            raise Exception(error_msg)
-        
-        task.logs += f"【信息】找到激活的附件: {active_attachment['filename']}\n"
+            task.status = JobStatus.FAILED
+            db.commit()
+            return
+
+        file_path = active_attachment.get("path")
+        if not file_path:
+            error_msg = "错误：附件中没有文件路径"
+            task.logs += f"【错误】{error_msg}\n"
+            task.status = JobStatus.FAILED
+            db.commit()
+            return
+
+        task.logs += f"【信息】处理附件: {file_path}\n"
         db.commit()
-        
+
+        # 检查文件是否存在
+        if not os.path.exists(file_path):
+            error_msg = f"错误：找不到文件 {file_path}"
+            task.logs += f"【错误】{error_msg}\n"
+            task.status = JobStatus.FAILED
+            db.commit()
+            return
+
         # 检查任务状态
         if not check_job_task_status(db, task):
             task.logs += "【中止】任务已暂停或取消\n"
             db.commit()
             return
-        
-        # 转换文件
-        file_path = active_attachment["path"]
-        task.logs += f"【处理】开始转换文件: {file_path}\n"
+
+        # 检查文件类型
+        file_name = os.path.basename(file_path)
+        task.logs += f"【信息】文件名: {file_name}\n"
         db.commit()
-        
-        # 更新进度
+
+        # 获取文件扩展名（小写）
+        file_ext = os.path.splitext(file_name)[1].lower()
+        task.logs += f"【信息】文件扩展名: {file_ext}\n"
+        db.commit()
+
+        # 更新任务进度
         task.progress = 20
-        task.logs += "【进度】文件解析中... 20%\n"
         db.commit()
-        
-        markdown_text = convert_file_to_markdown(file_path)
-        
-        # 更新进度
-        task.progress = 60
-        task.logs += "【进度】文件转换完成，准备更新数据库... 60%\n"
-        db.commit()
-        
-        # 创建或更新AIReviewReport
-        ai_review = db.query(AIReviewReport).filter(
-            AIReviewReport.article_id == article_id,
-        ).first()
-        
-        if not ai_review:
-            task.logs += "【信息】创建新的AI审阅报告...\n"
-            ai_review = AIReviewReport(
-                article_id=article_id,
-                job_id=task.job_id
-            )
-            db.add(ai_review)
+
+        try:
+            # 根据文件类型转换文件
+            task.logs += "【处理】开始转换文件为Markdown...\n"
             db.commit()
-            db.refresh(ai_review)
-        else:
-            task.logs += "【信息】更新现有的AI审阅报告...\n"
             
-        ai_review.processed_attachment_text = markdown_text
-        
-        # 更新文章的active_ai_review_report_id
-        article.active_ai_review_report_id = ai_review.id
-        db.commit()
-        
-        task.logs += f"【信息】已保存Markdown格式内容，字符长度: {len(markdown_text)}\n"
-        db.commit()
-        
-        # 最后检查任务状态
-        if not check_job_task_status(db, task):
-            task.logs += "【中止】任务已暂停或取消\n"
+            markdown_text = convert_file_to_markdown(file_path)
+            
+            task.progress = 80
+            task.logs += "【处理】文件转换完成，正在保存结果...\n"
             db.commit()
-            return
-        
-        # 更新任务状态为完成
-        task.status = JobStatus.COMPLETED
-        task.progress = 100
-        task.logs += "【完成】文档成功转换为Markdown格式！\n"
-        db.commit()
-        
-        # 更新父Job的状态
-        update_job_status(db, task.job_id)
-        
-    except Exception as e:
-        error_msg = f"Error: Markdown conversion failed: {str(e)}"
-        task.status = JobStatus.FAILED
-        task.logs += f"【错误】Markdown转换失败: {str(e)}\n"
-        db.commit()
-        raise
+            
+            # 检查任务状态
+            if not check_job_task_status(db, task):
+                task.logs += "【中止】任务已暂停或取消\n"
+                db.commit()
+                return
+            
+            # 保存转换后的Markdown文本
+            # 检查是否已经有AI审阅报告
+            ai_review = db.query(AIReviewReport).filter(
+                AIReviewReport.article_id == article_id,
+                AIReviewReport.job_id == task.job_id
+            ).first()
+            
+            if not ai_review:
+                task.logs += "【信息】创建新的AI审阅报告...\n"
+                ai_review = AIReviewReport(
+                    article_id=article_id,
+                    job_id=task.job_id
+                )
+                db.add(ai_review)
+                db.commit()
+                db.refresh(ai_review)
+            else:
+                task.logs += "【信息】更新现有的AI审阅报告...\n"
+                
+            ai_review.processed_attachment_text = markdown_text
+            
+            # 更新文章的active_ai_review_report_id
+            article.active_ai_review_report_id = ai_review.id
+            db.commit()
+            
+            task.logs += f"【信息】已保存Markdown格式内容，字符长度: {len(markdown_text)}\n"
+            db.commit()
+            
+            # 最后检查任务状态
+            if not check_job_task_status(db, task):
+                task.logs += "【中止】任务已暂停或取消\n"
+                db.commit()
+                return
+            
+            # 更新任务状态为完成
+            task.status = JobStatus.COMPLETED
+            task.progress = 100
+            task.logs += "【完成】文档成功转换为Markdown格式！\n"
+            db.commit()
+            
+            # 更新父Job的状态由schedule_job_tasks负责
+        except Exception as e:
+            task.status = JobStatus.FAILED
+            task.logs += f"【错误】Markdown转换失败: {str(e)}\n"
+            db.commit()
+            raise
     finally:
         db.close()
 
@@ -459,11 +522,22 @@ def process_with_llm_task(task_id: int, article_id: int):
         ai_review = db.query(AIReviewReport).filter(
             AIReviewReport.article_id == article_id
         ).first()
-
-        if not ai_review or not ai_review.processed_attachment_text:
-            error_msg = "错误：未找到处理过的文本内容，请先执行转换为Markdown的任务"
+        
+        if not ai_review:
+            error_msg = "错误：找不到AI审阅报告"
             task.logs += f"【错误】{error_msg}\n"
             raise Exception(error_msg)
+            
+        # 检查是否已经有Markdown格式的文本
+        if not ai_review.processed_attachment_text:
+            error_msg = "错误：AI审阅报告中缺少处理后的文档内容"
+            task.logs += f"【错误】{error_msg}\n"
+            raise Exception(error_msg)
+            
+        markdown_text = ai_review.processed_attachment_text
+        
+        task.logs += f"【信息】获取到Markdown格式内容，字符长度: {len(markdown_text)}\n"
+        db.commit()
         
         # 检查任务状态
         if not check_job_task_status(db, task):
@@ -471,139 +545,131 @@ def process_with_llm_task(task_id: int, article_id: int):
             db.commit()
             return
             
-        processed_text = ai_review.processed_attachment_text
-        text_length = len(processed_text)
-        task.logs += f"【信息】获取到处理过的文本内容，长度: {text_length} 字符\n"
+        # 获取任务特定的配置
+        task_config = get_task_config('process_with_llm', project.config)
+        
+        # 从任务配置中获取模型
+        model = task_config.get('model')
+        if not model:
+            model = get_default_model_for_task('process_with_llm')
+            task.logs += f"【信息】使用默认模型: {model}\n"
+        else:
+            task.logs += f"【信息】使用配置指定模型: {model}\n"
+        db.commit()
+            
+        # 检查模型是否在可用列表中
+        available_models = get_available_models_for_task('process_with_llm')
+        if available_models and model not in available_models:
+            old_model = model
+            model = available_models[0] if available_models else "deepseek/deepseek-coder"
+            task.logs += f"【警告】指定模型 {old_model} 不可用，切换为: {model}\n"
+            db.commit()
+        
+        task.logs += "【处理】开始调用大语言模型处理内容...\n"
+        task.progress = 40
         db.commit()
         
-        # 使用LLM处理文章内容
+        # 构建评审提示词
+        system_prompt = """你是一位专业的文档审阅助手，需要对文档内容进行全面审阅并提供详细报告。
+请按照以下结构返回你的审阅报告：
+
+# 摘要
+[简要总结文档的主要内容和目的，2-3句话]
+
+# 文档结构评估
+[分析文档的组织结构是否清晰、逻辑是否连贯，段落划分是否合理]
+
+# 内容完整性
+[评估文档内容是否完整，是否缺少重要信息]
+
+# 语言表达
+[评估文档的语言表达是否清晰、准确、专业]
+
+# 专业性评估
+[评估文档的专业水平，包括术语使用、论证方式等]
+
+# 格式规范
+[评估文档格式是否符合规范，包括标点、排版等]
+
+# 具体问题清单
+[列出文档中发现的具体问题，包括错误、不一致、不清晰的表述等]
+
+# 改进建议
+[提供具体的改进建议]
+
+# 总体评分
+[给出总体评分，1-10分]
+"""
+
+        user_prompt = f"""请对以下文档内容进行专业审阅：
+
+{markdown_text}
+"""
+        
         try:
-            # 从config中获取提示词
-            prompt = project.config.get('prompt', '')
-            
-            # 如果项目配置中没有prompt，则从article_type中获取
-            if not prompt and hasattr(project, 'article_type') and project.article_type:
-                article_type = project.article_type
-                if article_type and article_type.config:
-                    prompt = article_type.config.get('prompt', '')
-                    if prompt:
-                        task.logs += f"【信息】从文章类型 '{article_type.name}' 获取提示词\n"
-                
-            # 如果仍然没有prompt，使用默认提示词
-            if not prompt:
-                default_prompt = "请分析以下文档内容，给出主要观点和建议。"
-                prompt = default_prompt
-                task.logs += f"【警告】未找到配置的提示词，使用默认提示词\n"
-            
-            task.logs += f"【信息】使用的提示词长度: {len(prompt)} 字符\n"
-            db.commit()
-
-            # 获取任务特定的配置
-            task_config = get_task_config('process_with_llm', project.config)
-            
-            # 从任务配置中获取模型
-            model = task_config.get('model')
-            if not model:
-                model = get_default_model_for_task('process_with_llm')
-                task.logs += f"【信息】使用默认模型: {model}\n"
-            else:
-                task.logs += f"【信息】使用配置指定模型: {model}\n"
-            db.commit()
-                
-            # 检查模型是否在可用列表中
-            available_models = get_available_models_for_task('process_with_llm')
-            if available_models and model not in available_models:
-                old_model = model
-                model = available_models[0] if available_models else "deepseek/deepseek-chat"
-                task.logs += f"【警告】指定模型 {old_model} 不可用，切换为: {model}\n"
-                db.commit()
-
-            task.logs += "【处理】开始调用大语言模型...\n"
-            task.progress = 10
-            db.commit()
-
-            # 使用litellm的流式API，包含任务特定的配置
+            # 调用AI模型生成审阅报告
             response = completion(
                 model=model,
                 messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": processed_text}
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
                 ],
-                stream=True,  # 启用流式输出
                 **{k: v for k, v in task_config.items() if k != 'model'}  # 排除model字段，添加其他配置
             )
-
-            # 初始化累积的响应文本
-            accumulated_response = ""
-            last_progress_update = 0
             
-            task.logs += "【进度】模型开始响应...\n"
+            ai_review_content = response.choices[0].message.content
+            
+            task.logs += "【信息】AI模型响应完成，保存审阅报告...\n"
+            task.progress = 80
             db.commit()
             
-            # 处理流式响应
-            for chunk in response:
-                # 检查任务状态
-                if not check_job_task_status(db, task):
-                    task.logs += "【中止】任务已暂停或取消\n"
-                    db.commit()
-                    return
-
-                # 从chunk中提取文本
-                if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
-                    content = chunk.choices[0].delta.content
-                    if content:
-                        accumulated_response += content
-                        # 更新AI审阅报告的source_data
-                        ai_review.source_data = accumulated_response
-                        db.commit()
-
-                # 更新进度（这里使用一个近似值）
-                current_length = len(accumulated_response)
-                if current_length > 0:
-                    progress = min(95, int((current_length / 1000) * 5) + 10)  # 假设平均响应长度为1000字符，起始进度为10%
-                    
-                    # 仅在进度变化超过5%时更新日志，避免日志过多
-                    if progress >= last_progress_update + 5:
-                        task.logs += f"【进度】模型响应中... {progress}%\n"
-                        last_progress_update = progress
-                        
-                    task.progress = progress
-                    db.commit()
-
-            # 完成处理
-            task.progress = 100
-            task.status = JobStatus.COMPLETED
-            ai_review.status = "completed"
+            # 检查任务状态
+            if not check_job_task_status(db, task):
+                task.logs += "【中止】任务已暂停或取消\n"
+                db.commit()
+                return
+                
+            # 更新AI审阅报告内容
+            ai_review.review_content = ai_review_content
+            ai_review.source_data = ai_review_content
             
-            task.logs += f"【信息】模型响应完成，生成内容长度: {len(accumulated_response)} 字符\n"
+            # 更新文章的active_ai_review_report_id
+            article.active_ai_review_report_id = ai_review.id
+            
+            db.commit()
+            
+            task.logs += f"【信息】审阅报告已保存，字符长度: {len(ai_review_content)}\n"
+            db.commit()
+            
+            # 更新任务状态为完成
+            task.status = JobStatus.COMPLETED
+            task.progress = 100
             task.logs += "【完成】AI审阅报告生成成功！\n"
             db.commit()
             
-            # 更新父Job的状态
-            update_job_status(db, task.job_id)
+            # 不再调用update_job_status，由schedule_job_tasks负责
             
         except Exception as e:
             task.status = JobStatus.FAILED
-            task.logs += f"【错误】LLM处理过程中出错: {str(e)}\n"
-            ai_review.status = "failed"
+            task.logs += f"【错误】AI审阅失败: {str(e)}\n"
+            db.commit()
             raise
-
-        db.commit()
-        return task
-
+            
     except Exception as e:
-        task.status = JobStatus.FAILED
-        task.logs += f"【错误】任务执行失败: {str(e)}\n"
-        db.commit()
+        print(f"Error processing task {task_id}: {str(e)}")
+        if task:
+            task.status = JobStatus.FAILED
+            task.logs += f"【错误】处理失败: {str(e)}\n"
+            db.commit()
         raise
-
     finally:
         db.close()
 
 def process_ai_review_task(task_id: int, article_id: int):
-    """处理文章内容并生成完整的AI审阅报告"""
+    """处理AI审阅报告，生成最终的AI审阅结果"""
     db = SessionLocal()
     try:
+        # 获取任务信息
         task = db.query(JobTask).filter(JobTask.id == task_id).first()
         if not task:
             raise Exception("Task not found")
@@ -611,109 +677,97 @@ def process_ai_review_task(task_id: int, article_id: int):
         # 更新任务状态
         task.status = JobStatus.PROCESSING
         task.progress = 0
+        task.logs = "【开始】开始处理AI审阅报告...\n"
         db.commit()
 
-        # 获取文章、项目和AI审阅报告
+        # 获取文章信息
         article = db.query(Article).filter(Article.id == article_id).first()
         if not article:
-            raise Exception("Article not found")
+            error_msg = f"错误：找不到文章ID {article_id}"
+            task.logs += f"【错误】{error_msg}\n"
+            raise Exception(error_msg)
 
+        task.logs += f"【信息】正在处理文章: {article.name}，ID: {article.id}\n"
+        db.commit()
+
+        # 获取项目信息
         project = db.query(Project).filter(Project.id == article.project_id).first()
         if not project:
-            raise Exception("Project not found")
+            error_msg = "错误：找不到项目信息"
+            task.logs += f"【错误】{error_msg}\n"
+            raise Exception(error_msg)
 
+        task.logs += f"【信息】项目名称: {project.name}，ID: {project.id}\n"
+        db.commit()
+        
+        # 获取AI审阅报告
         ai_review = db.query(AIReviewReport).filter(
-            AIReviewReport.article_id == article_id
+            AIReviewReport.article_id == article_id,
+            AIReviewReport.job_id == task.job_id
         ).first()
-
-        if not ai_review or not ai_review.processed_attachment_text:
-            raise Exception("No processed text found. Please run convert_to_markdown first.")
         
-        processed_text = ai_review.processed_attachment_text
-        
-        # 处理配置信息
-        config = project.config or {}
-        main_prompt = config.get('prompt', '')
-        format_prompt = config.get('format_prompt', '')
-        review_criteria = config.get('review_criteria', [])
-        min_words = config.get('min_words', 0)
-        max_words = config.get('max_words', 0)
-        language = config.get('language', 'zh')
-
-        if not main_prompt:
-            raise Exception("No prompt configured in project")
-
-        # 构建完整的提示词
-        full_prompt = main_prompt
-        if format_prompt:
-            full_prompt += f"\n\n输出格式要求：\n{format_prompt}"
-        if review_criteria:
-            full_prompt += f"\n\n评审标准：\n{review_criteria}"
-        if min_words or max_words:
-            full_prompt += f"\n\n字数要求：{min_words}-{max_words}字"
-        
-        try:
-            # 获取任务特定的配置
-            task_config = get_task_config('ai_review', project.config)
-            
-            # 从任务配置中获取模型
-            model = task_config.get('model')
-            if not model:
-                model = get_default_model_for_task('ai_review')
-                
-            # 检查模型是否在可用列表中
-            available_models = get_available_models_for_task('ai_review')
-            if available_models and model not in available_models:
-                model = available_models[0] if available_models else "deepseek/deepseek-reason"
-                
-            # 使用litellm的流式API，包含任务特定的配置
-            response = completion(
-                model=model,
-                messages=[
-                    {"role": "system", "content": full_prompt},
-                    {"role": "user", "content": processed_text}
-                ],
-                stream=True,
-                **{k: v for k, v in task_config.items() if k != 'model'}  # 排除model字段，添加其他配置
-            )
-
-            accumulated_response = ""
-            for chunk in response:
-                if not check_job_task_status(db, task):
-                    return
-
-                if hasattr(chunk.choices[0], 'delta') and hasattr(chunk.choices[0].delta, 'content'):
-                    content = chunk.choices[0].delta.content
-                    if content:
-                        accumulated_response += content
-                        ai_review.source_data = accumulated_response
-                        db.commit()
-
-                current_length = len(accumulated_response)
-                if current_length > 0:
-                    progress = min(95, int((current_length / 1000) * 5))
-                    task.progress = progress
-                    db.commit()
-
-            task.progress = 100
-            task.status = JobStatus.COMPLETED
-            ai_review.status = "completed"
-            
-        except Exception as e:
+        if not ai_review:
+            error_msg = "错误：找不到AI审阅报告"
+            task.logs += f"【错误】{error_msg}\n"
             task.status = JobStatus.FAILED
-            task.logs += f"\nError during LLM processing: {str(e)}"
-            ai_review.status = "failed"
-            raise
-
+            db.commit()
+            return
+            
+        if not ai_review.source_data:
+            error_msg = "错误：AI审阅报告中缺少源数据"
+            task.logs += f"【错误】{error_msg}\n"
+            task.status = JobStatus.FAILED
+            db.commit()
+            return
+        
+        # 检查任务状态
+        if not check_job_task_status(db, task):
+            task.logs += "【中止】任务已暂停或取消\n"
+            db.commit()
+            return
+        
+        # 处理AI审阅结果
+        task.logs += "【处理】开始生成最终的AI审阅结果...\n"
+        task.progress = 50
         db.commit()
-        return task
-
+        
+        # 解析AI审阅结果，这里简单地将source_data保存为review_content
+        ai_review.review_content = ai_review.source_data
+        
+        # 更新文章的active_ai_review_report_id
+        article.active_ai_review_report_id = ai_review.id
+        
+        # 如果项目配置中有自动设置文章状态，则设置
+        if project.config and project.config.get('auto_set_status'):
+            article.status = "reviewed"
+            task.logs += "【信息】已自动将文章状态设置为已审阅\n"
+        
+        db.commit()
+        
+        task.logs += "【信息】已保存AI审阅结果\n"
+        db.commit()
+        
+        # 检查任务状态
+        if not check_job_task_status(db, task):
+            task.logs += "【中止】任务已暂停或取消\n"
+            db.commit()
+            return
+        
+        # 更新任务状态为完成
+        task.status = JobStatus.COMPLETED
+        task.progress = 100
+        task.logs += "【完成】AI审阅报告处理成功！\n"
+        db.commit()
+        
+        # 不再调用update_job_status，由schedule_job_tasks负责
+        
     except Exception as e:
-        task.status = JobStatus.FAILED
-        task.logs += f"\nError: {str(e)}"
-        db.commit()
+        if task:
+            task.status = JobStatus.FAILED
+            task.logs += f"【错误】处理失败: {str(e)}\n"
+            db.commit()
+        print(f"Error processing AI review task {task_id}: {str(e)}")
         raise
-
     finally:
         db.close()
 
@@ -908,8 +962,7 @@ def process_upload_task(task_id: int, file_path: str, project_id: int):
         task.logs += "【完成】所有文件处理完成！\n"
         db.commit()
         
-        # 更新父Job的状态
-        update_job_status(db, task.job_id)
+        # 不再调用update_job_status，由schedule_job_tasks负责
         
     except Exception as e:
         print(f"Error occurred in task {task_id}: {str(e)}")
@@ -1105,23 +1158,41 @@ def extract_structured_data_task(task_id: int, article_id: int):
             ).first()
             task.logs += f"【信息】使用文章指定的活跃AI审阅报告，ID: {article.active_ai_review_report_id}\n"
         
+        # 如果没有找到活跃的review，尝试查找job关联的review
         if not ai_review:
-            # 如果没有活跃的review，尝试获取最新的一个
-            task.logs += "【信息】未找到活跃的AI审阅报告，尝试获取最新的报告...\n"
+            ai_review = db.query(AIReviewReport).filter(
+                AIReviewReport.article_id == article_id,
+                AIReviewReport.job_id == task.job_id
+            ).first()
+            if ai_review:
+                task.logs += f"【信息】使用当前job关联的AI审阅报告，ID: {ai_review.id}\n"
+        
+        # 如果仍未找到，查找最新的review
+        if not ai_review:
             ai_review = db.query(AIReviewReport).filter(
                 AIReviewReport.article_id == article_id
             ).order_by(AIReviewReport.created_at.desc()).first()
-            
-            # 如果找到了review，更新article的active_ai_review_report_id
             if ai_review:
-                article.active_ai_review_report_id = ai_review.id
-                task.logs += f"【信息】找到最新的AI审阅报告，ID: {ai_review.id}，已设置为活跃\n"
-                db.commit()
-
-        if not ai_review or not ai_review.source_data:
-            error_msg = "错误：未找到源数据，请先执行LLM处理任务"
+                task.logs += f"【信息】使用最新的AI审阅报告，ID: {ai_review.id}\n"
+        
+        if not ai_review:
+            error_msg = "错误：找不到AI审阅报告"
             task.logs += f"【错误】{error_msg}\n"
-            raise Exception(error_msg)
+            task.status = JobStatus.FAILED
+            db.commit()
+            return
+            
+        # 获取审阅内容
+        review_content = ai_review.review_content
+        if not review_content:
+            error_msg = "错误：AI审阅报告中缺少内容"
+            task.logs += f"【错误】{error_msg}\n"
+            task.status = JobStatus.FAILED
+            db.commit()
+            return
+            
+        # 获取原始内容作为上下文
+        source_data = ai_review.processed_attachment_text or ""
         
         # 检查任务状态
         if not check_job_task_status(db, task):
@@ -1129,18 +1200,40 @@ def extract_structured_data_task(task_id: int, article_id: int):
             db.commit()
             return
             
-        source_data = ai_review.source_data
-        task.logs += f"【信息】获取到源数据，长度: {len(source_data)} 字符\n"
-        db.commit()
-        
-        # 处理配置信息
-        config = project.config or {}
-        extraction_prompt = config.get('extraction_prompt', '请根据以下分析报告内容数据提取，并按照要求输出结果：\n输出示例:\nroot:\n  score: 80\n  result: 优秀')
-        
-        task.logs += "【信息】已获取数据提取提示词\n"
-        task.progress = 20
-        db.commit()
-        
+        # 构建提取结构化数据的prompt
+        extraction_prompt = """请从以下审阅报告中提取结构化数据，以YAML格式返回：
+
+1. 摘要
+2. 结构评分 (1-10)
+3. 内容完整性评分 (1-10)
+4. 语言表达评分 (1-10)
+5. 专业性评分 (1-10)
+6. 格式规范评分 (1-10)
+7. 总体评分 (1-10)
+8. 问题清单 (列表)
+9. 改进建议 (列表)
+
+使用以下YAML格式：
+
+```yaml
+summary: 简短摘要
+structure_score: 7
+completeness_score: 8
+language_score: 9
+professionalism_score: 7
+format_score: 8
+overall_score: 8
+issues:
+  - 第一个问题
+  - 第二个问题
+suggestions:
+  - 第一个建议
+  - 第二个建议
+```
+
+审阅报告:
+"""
+
         try:
             # 获取任务特定的配置
             task_config = get_task_config('extract_structured_data', project.config)
@@ -1167,7 +1260,7 @@ def extract_structured_data_task(task_id: int, article_id: int):
             db.commit()
                 
             # 使用AI模型提取结构化数据
-            prompt = f"{extraction_prompt}\n\n{source_data}"
+            prompt = f"{extraction_prompt}\n\n{review_content}"
             
             response = completion(
                 model=model,
@@ -1181,60 +1274,48 @@ def extract_structured_data_task(task_id: int, article_id: int):
             yaml_content = response.choices[0].message.content
             
             task.logs += "【信息】模型响应完成，准备解析结构化数据...\n"
-            task.progress = 60
+            task.progress = 70
             db.commit()
             
-            # 尝试解析YAML内容
-            try:
-                # 移除可能存在的代码块标记
-                yaml_content = yaml_content.replace('```yaml', '').replace('```', '').strip()
-                
-                task.logs += "【处理】解析YAML数据...\n"
-                task.progress = 80
-                db.commit()
-                
-                # 解析YAML为Python字典
-                import yaml
-                structured_data = yaml.safe_load(yaml_content)
-                
-                # 保存结构化数据
-                ai_review.structured_data = structured_data
-                db.commit()
-                
-                task.logs += "【信息】结构化数据解析成功并已保存\n"
-                task.status = JobStatus.COMPLETED
-                task.progress = 100
-                task.logs += "【完成】成功从AI审阅结果中提取结构化数据！\n"
-                db.commit()
-                
-                # 更新父Job的状态
-                update_job_status(db, task.job_id)
-                return
-                
-            except Exception as e:
-                error_msg = f"解析YAML失败: {str(e)}"
-                task.logs += f"【错误】{error_msg}\n"
-                task.logs += f"【详情】响应内容: {yaml_content}\n"
-                task.status = JobStatus.FAILED
+            # 从YAML内容中提取```yaml和```之间的内容
+            import re
+            yaml_pattern = r"```(?:yaml)?\n(.*?)```"
+            match = re.search(yaml_pattern, yaml_content, re.DOTALL)
+            if match:
+                yaml_content = match.group(1)
+            
+            # 保存结构化数据
+            ai_review.structured_data = yaml_content
+            db.commit()
+            
+            task.logs += "【信息】结构化数据已保存\n"
+            db.commit()
+            
+            # 检查任务状态
+            if not check_job_task_status(db, task):
+                task.logs += "【中止】任务已暂停或取消\n"
                 db.commit()
                 return
+            
+            # 更新任务状态为完成
+            task.status = JobStatus.COMPLETED
+            task.progress = 100
+            task.logs += "【完成】结构化数据提取成功！\n"
+            db.commit()
+            
+            # 不再调用update_job_status，由schedule_job_tasks负责
             
         except Exception as e:
-            import traceback
-            error_msg = f"错误: {str(e)}"
-            task.logs += f"【错误】{error_msg}\n"
-            task.logs += f"【详情】{traceback.format_exc()}\n"
             task.status = JobStatus.FAILED
+            task.logs += f"【错误】结构化数据提取失败: {str(e)}\n"
             db.commit()
             raise
-        
+            
     except Exception as e:
-        import traceback
+        print(f"Error extracting structured data: {str(e)}")
         if task:
-            error_msg = f"错误: {str(e)}"
-            task.logs += f"【错误】{error_msg}\n"
-            task.logs += f"【详情】{traceback.format_exc()}\n"
             task.status = JobStatus.FAILED
+            task.logs += f"【错误】处理失败: {str(e)}\n"
             db.commit()
         raise
     finally:
