@@ -24,7 +24,11 @@ ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp'}
 
 # 创建Redis连接和队列
 redis_conn = Redis()
+# 创建一个默认队列，用于并行执行不同job的任务
 task_queue = Queue(connection=redis_conn)
+# 创建一个执行任务的队列字典，用于跟踪每个job的任务执行
+# 键为job_id，值为当前正在执行的任务数量
+job_tasks = {}
 
 # 加载模型配置
 def load_model_config():
@@ -222,6 +226,10 @@ def execute_task(task_id: int):
         else:
             raise ValueError(f"未知的任务类型: {task.task_type}")
         
+        # 更新job_tasks计数
+        if task.job_id in job_tasks:
+            job_tasks[task.job_id] = max(0, job_tasks[task.job_id] - 1)
+        
         # 任务执行完成后，立即调度下一个任务
         task_queue.enqueue(schedule_job_tasks, args=(task.job_id,))
             
@@ -232,6 +240,11 @@ def execute_task(task_id: int):
         )
         db.commit()
         
+        # 更新job_tasks计数
+        task = db.query(JobTask).filter(JobTask.id == task_id).first()
+        if task and task.job_id in job_tasks:
+            job_tasks[task.job_id] = max(0, job_tasks[task.job_id] - 1)
+        
         # 即使任务失败，也调度下一个任务
         task_queue.enqueue(schedule_job_tasks, args=(db.query(JobTask).filter(JobTask.id == task_id).first().job_id,))
         raise
@@ -239,7 +252,7 @@ def execute_task(task_id: int):
         db.close()
 
 def schedule_job_tasks(job_id: int):
-    """调度Job的所有任务，确保Job内部的任务按严格顺序执行"""
+    """调度Job的所有任务，确保Job内部的任务按严格顺序执行，但允许不同job并行执行"""
     db = SessionLocal()
     try:
         # 获取Job信息
@@ -247,13 +260,19 @@ def schedule_job_tasks(job_id: int):
         if not job:
             return
         
+        # 获取作业的并行度设置
+        job_parallelism = job.parallelism or 1
+        
         # 获取所有任务及其状态
         all_tasks = db.query(JobTask).filter(JobTask.job_id == job_id).all()
         
         # 检查当前是否有任务正在处理中
         processing_tasks = [t for t in all_tasks if t.status == JobStatus.PROCESSING]
+        
+        # 在单个作业内部仍然保持严格顺序执行的策略
         if processing_tasks:
             # 如果有任务正在处理中，等待它完成
+            # 在当前作业内部，保持严格的任务顺序执行
             print(f"Job {job_id} - 已有任务正在处理中，等待完成")
             task_queue.enqueue_in(timedelta(seconds=15), schedule_job_tasks, args=(job_id,))
             return
@@ -267,6 +286,9 @@ def schedule_job_tasks(job_id: int):
                 print(f"Job {job_id} - 所有任务已处理完成")
                 # 更新Job状态
                 update_job_status(db, job_id)
+                # 从job_tasks字典中移除此job
+                if job_id in job_tasks:
+                    del job_tasks[job_id]
             else:
                 # 可能有暂停的任务，15秒后再检查
                 task_queue.enqueue_in(timedelta(seconds=15), schedule_job_tasks, args=(job_id,))
@@ -291,6 +313,9 @@ def schedule_job_tasks(job_id: int):
             # 更新任务状态
             next_task.status = JobStatus.PROCESSING
             db.commit()
+            
+            # 记录此job当前正在执行的任务数
+            job_tasks[job_id] = job_tasks.get(job_id, 0) + 1
         
         # 15秒后再次检查
         task_queue.enqueue_in(timedelta(seconds=15), schedule_job_tasks, args=(job_id,))
