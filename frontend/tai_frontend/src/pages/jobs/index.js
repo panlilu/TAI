@@ -11,6 +11,7 @@ import {
   FileTextOutlined
 } from '@ant-design/icons';
 import request from '../../utils/request';
+import { eventService } from '../../utils/eventService';
 
 const { Panel } = Collapse;
 
@@ -21,6 +22,7 @@ const Jobs = () => {
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [currentLogs, setCurrentLogs] = useState('');
   const [logModalTitle, setLogModalTitle] = useState('');
+  const [currentTaskId, setCurrentTaskId] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -33,12 +35,78 @@ const Jobs = () => {
     setLoading(false);
   };
 
+  // 处理任务状态更新
+  const handleJobUpdate = (eventData) => {
+    setData(prevData => {
+      const updatedData = [...prevData];
+      const jobIndex = updatedData.findIndex(job => job.id === eventData.id);
+      
+      if (jobIndex !== -1) {
+        // 更新现有任务
+        updatedData[jobIndex] = {
+          ...updatedData[jobIndex],
+          status: eventData.status,
+          progress: eventData.progress
+        };
+      }
+      
+      return updatedData;
+    });
+  };
+
+  // 处理子任务更新，包括日志更新
+  const handleTaskUpdate = (eventData) => {
+    setData(prevData => {
+      const updatedData = [...prevData];
+      const jobIndex = updatedData.findIndex(job => job.id === eventData.job_id);
+      
+      if (jobIndex !== -1) {
+        // 找到对应的任务
+        const job = {...updatedData[jobIndex]};
+        
+        if (job.tasks) {
+          const taskIndex = job.tasks.findIndex(task => task.id === eventData.task_id);
+          
+          if (taskIndex !== -1) {
+            // 更新任务状态和日志
+            job.tasks[taskIndex] = {
+              ...job.tasks[taskIndex],
+              status: eventData.status,
+              progress: eventData.progress,
+              logs: eventData.logs
+            };
+            
+            // 如果当前正在查看该任务的日志，则更新显示的日志
+            if (currentTaskId === eventData.task_id) {
+              setCurrentLogs(eventData.logs || '暂无日志');
+            }
+          }
+        }
+        
+        updatedData[jobIndex] = job;
+      }
+      
+      return updatedData;
+    });
+  };
+
   useEffect(() => {
     fetchData();
-    // 定期刷新任务状态
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, []);
+    
+    // 注册事件监听器
+    eventService.addEventListener('job_update', handleJobUpdate);
+    eventService.addEventListener('task_update', handleTaskUpdate);
+    
+    // 定期刷新任务状态（作为备用机制）
+    const interval = setInterval(fetchData, 30000);
+    
+    return () => {
+      clearInterval(interval);
+      // 移除事件监听器
+      eventService.removeEventListener('job_update', handleJobUpdate);
+      eventService.removeEventListener('task_update', handleTaskUpdate);
+    };
+  }, [currentTaskId]);
 
   const handleRetry = async (id, taskId = null) => {
     try {
@@ -159,12 +227,14 @@ const Jobs = () => {
   const showTaskLogs = (task, jobName) => {
     setCurrentLogs(task.logs || '暂无日志');
     setLogModalTitle(`${jobName || `任务 #${task.job_id}`} - ${getTaskTypeText(task.task_type)}日志`);
+    setCurrentTaskId(task.id);
     setLogModalVisible(true);
   };
 
   // 关闭日志弹窗
   const handleLogModalClose = () => {
     setLogModalVisible(false);
+    setCurrentTaskId(null);
   };
 
   const renderTasksTable = (tasks) => {

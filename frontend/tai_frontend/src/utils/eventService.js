@@ -7,6 +7,31 @@ class EventService {
   constructor() {
     this.eventSource = null;
     this.aiReviewEventSource = null;
+    this.eventListeners = {
+      job_update: [],
+      task_update: [],
+      heartbeat: []
+    };
+  }
+
+  // 添加事件监听器
+  addEventListener(eventType, callback) {
+    if (this.eventListeners[eventType]) {
+      this.eventListeners[eventType].push(callback);
+      return true;
+    }
+    return false;
+  }
+
+  // 移除事件监听器
+  removeEventListener(eventType, callback) {
+    if (this.eventListeners[eventType]) {
+      this.eventListeners[eventType] = this.eventListeners[eventType].filter(
+        cb => cb !== callback
+      );
+      return true;
+    }
+    return false;
   }
 
   connect() {
@@ -26,11 +51,17 @@ class EventService {
     this.eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
       
-      // Show notification for completed or failed jobs
-      if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+      // 根据事件类型分发事件
+      if (data.type) {
+        // 调用对应类型的事件处理器
+        if (this.eventListeners[data.type]) {
+          this.eventListeners[data.type].forEach(callback => callback(data));
+        }
+      } else if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+        // 向下兼容，处理旧版本事件
         notification.info({
           message: `任务${data.status === 'COMPLETED' ? '完成' : '失败'}`,
-          description: `任务 #${data.id} ${data.task} ${data.status === 'COMPLETED' ? '已完成' : '执行失败'}`,
+          description: `任务 #${data.id} ${data.task_type || ''} ${data.status === 'COMPLETED' ? '已完成' : '执行失败'}`,
           placement: 'topRight',
         });
       }

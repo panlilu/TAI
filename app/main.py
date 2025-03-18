@@ -1111,6 +1111,8 @@ async def job_events(
     async def event_generator():
         heartbeat_interval = 30  # 30秒发送一次心跳
         last_heartbeat = 0
+        last_job_updates = {}  # 存储上次更新的作业状态
+        last_task_updates = {}  # 存储上次更新的任务状态和日志
 
         while True:
             current_time = datetime.utcnow().timestamp()
@@ -1120,6 +1122,9 @@ async def job_events(
                 yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
                 last_heartbeat = current_time
 
+            # 刷新数据库会话以避免过期数据
+            db.expire_all()
+            
             # 查询最近10秒内更新的任务
             recent_jobs = db.query(models.Job).join(
                 models.Project
@@ -1135,14 +1140,61 @@ async def job_events(
                         models.JobTask.job_id == job.id
                     ).first()
                     
-                    data = {
+                    job_data = {
+                        "type": "job_update",
                         "id": job.id,
                         "name": job.name,
                         "status": job.status,
                         "progress": job.progress,
                         "task_type": first_task.task_type if first_task else None
                     }
-                    yield f"data: {json.dumps(data)}\n\n"
+                    
+                    # 检查作业状态是否有变化，有则发送更新
+                    if job.id not in last_job_updates or job.status != last_job_updates[job.id]['status'] or job.progress != last_job_updates[job.id]['progress']:
+                        yield f"data: {json.dumps(job_data)}\n\n"
+                        # 更新缓存的状态
+                        last_job_updates[job.id] = {
+                            'status': job.status,
+                            'progress': job.progress
+                        }
+                    
+                    # 查询该作业下的任务
+                    job_tasks = db.query(models.JobTask).filter(
+                        models.JobTask.job_id == job.id,
+                        models.JobTask.updated_at >= datetime.utcnow() - timedelta(seconds=10)
+                    ).all()
+                    
+                    for task in job_tasks:
+                        task_key = f"{job.id}_{task.id}"
+                        
+                        # 检查任务的状态和日志是否有变化
+                        task_changed = (
+                            task_key not in last_task_updates or
+                            task.status != last_task_updates[task_key]['status'] or
+                            task.progress != last_task_updates[task_key]['progress'] or
+                            task.logs != last_task_updates[task_key]['logs']
+                        )
+                        
+                        if task_changed:
+                            # 如果任务日志有更新，发送新的日志内容
+                            task_data = {
+                                "type": "task_update",
+                                "job_id": job.id,
+                                "task_id": task.id,
+                                "task_type": task.task_type,
+                                "status": task.status,
+                                "progress": task.progress,
+                                "logs": task.logs
+                            }
+                            
+                            yield f"data: {json.dumps(task_data)}\n\n"
+                            
+                            # 更新缓存的任务状态和日志
+                            last_task_updates[task_key] = {
+                                'status': task.status,
+                                'progress': task.progress,
+                                'logs': task.logs
+                            }
             
             await asyncio.sleep(2)  # Poll every 2 seconds
     
