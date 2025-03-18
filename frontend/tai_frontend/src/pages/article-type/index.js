@@ -66,14 +66,14 @@ const ArticleType = () => {
       max_words: record.config?.max_words || 0,
       language: record.config?.language || 'zh',
       // LLM配置
-      ai_review_model: record.config?.ai_review_model || '',
-      ai_review_temperature: record.config?.ai_review_temperature || 0.3,
-      ai_review_max_tokens: record.config?.ai_review_max_tokens || 4000,
-      ai_review_top_p: record.config?.ai_review_top_p || 0.9,
-      process_model: record.config?.process_model || '',
-      process_temperature: record.config?.process_temperature || 0.7,
-      process_max_tokens: record.config?.process_max_tokens || 2000,
-      process_top_p: record.config?.process_top_p || 0.95,
+      ai_review_model: record.config?.tasks?.ai_review?.model || '',
+      ai_review_temperature: record.config?.tasks?.ai_review?.temperature || 0.3,
+      ai_review_max_tokens: record.config?.tasks?.ai_review?.max_tokens || 4000,
+      ai_review_top_p: record.config?.tasks?.ai_review?.top_p || 0.9,
+      process_model: record.config?.tasks?.process_with_llm?.model || '',
+      process_temperature: record.config?.tasks?.process_with_llm?.temperature || 0.7,
+      process_max_tokens: record.config?.tasks?.process_with_llm?.max_tokens || 2000,
+      process_top_p: record.config?.tasks?.process_with_llm?.top_p || 0.95,
     });
     setEditingId(record.id);
     setModalVisible(true);
@@ -102,15 +102,20 @@ const ArticleType = () => {
           min_words: values.min_words || 0,
           max_words: values.max_words || 0,
           language: values.language || 'zh',
-          // LLM配置
-          ai_review_model: values.ai_review_model || '',
-          ai_review_temperature: values.ai_review_temperature || 0.3,
-          ai_review_max_tokens: values.ai_review_max_tokens || 4000,
-          ai_review_top_p: values.ai_review_top_p || 0.9,
-          process_model: values.process_model || '',
-          process_temperature: values.process_temperature || 0.7,
-          process_max_tokens: values.process_max_tokens || 2000,
-          process_top_p: values.process_top_p || 0.95,
+          tasks: {
+            ai_review: {
+              model: values.ai_review_model || '',
+              temperature: values.ai_review_temperature || 0.3,
+              max_tokens: values.ai_review_max_tokens || 4000,
+              top_p: values.ai_review_top_p || 0.9,
+            },
+            process_with_llm: {
+              model: values.process_model || '',
+              temperature: values.process_temperature || 0.7,
+              max_tokens: values.process_max_tokens || 2000,
+              top_p: values.process_top_p || 0.95,
+            }
+          }
         }
       };
 

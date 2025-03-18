@@ -51,14 +51,14 @@ const Settings = () => {
         auto_approve: projectData.auto_approve,
         ...projectData.config,
         // 设置LLM配置的初始值
-        ai_review_model: projectData.config?.ai_review_model || '',
-        ai_review_temperature: projectData.config?.ai_review_temperature || 0.3,
-        ai_review_max_tokens: projectData.config?.ai_review_max_tokens || 4000,
-        ai_review_top_p: projectData.config?.ai_review_top_p || 0.9,
-        process_model: projectData.config?.process_model || '',
-        process_temperature: projectData.config?.process_temperature || 0.7,
-        process_max_tokens: projectData.config?.process_max_tokens || 2000,
-        process_top_p: projectData.config?.process_top_p || 0.95,
+        ai_review_model: projectData.config?.tasks?.ai_review?.model || '',
+        ai_review_temperature: projectData.config?.tasks?.ai_review?.temperature || 0.3,
+        ai_review_max_tokens: projectData.config?.tasks?.ai_review?.max_tokens || 4000,
+        ai_review_top_p: projectData.config?.tasks?.ai_review?.top_p || 0.9,
+        process_model: projectData.config?.tasks?.process_with_llm?.model || '',
+        process_temperature: projectData.config?.tasks?.process_with_llm?.temperature || 0.7,
+        process_max_tokens: projectData.config?.tasks?.process_with_llm?.max_tokens || 2000,
+        process_top_p: projectData.config?.tasks?.process_with_llm?.top_p || 0.95,
       });
     } catch (error) {
       message.error('加载项目信息失败');
@@ -81,15 +81,20 @@ const Settings = () => {
           format_prompt: values.format_prompt,
           review_criteria: values.review_criteria,
           language: values.language || 'zh',
-          // LLM配置
-          ai_review_model: values.ai_review_model || '',
-          ai_review_temperature: values.ai_review_temperature || 0.3,
-          ai_review_max_tokens: values.ai_review_max_tokens || 4000,
-          ai_review_top_p: values.ai_review_top_p || 0.9,
-          process_model: values.process_model || '',
-          process_temperature: values.process_temperature || 0.7,
-          process_max_tokens: values.process_max_tokens || 2000,
-          process_top_p: values.process_top_p || 0.95,
+          tasks: {
+            ai_review: {
+              model: values.ai_review_model || '',
+              temperature: values.ai_review_temperature || 0.3,
+              max_tokens: values.ai_review_max_tokens || 4000,
+              top_p: values.ai_review_top_p || 0.9,
+            },
+            process_with_llm: {
+              model: values.process_model || '',
+              temperature: values.process_temperature || 0.7,
+              max_tokens: values.process_max_tokens || 2000,
+              top_p: values.process_top_p || 0.95,
+            }
+          }
         },
         auto_approve: values.auto_approve
       };
@@ -133,14 +138,14 @@ const Settings = () => {
               {articleType.config.language === 'zh' ? '中文' : 'English'}
             </Descriptions.Item>
           )}
-          {articleType.config.ai_review_model && (
+          {articleType.config.tasks?.ai_review?.model && (
             <Descriptions.Item label="AI审阅模型">
-              {articleType.config.ai_review_model}
+              {articleType.config.tasks.ai_review.model}
             </Descriptions.Item>
           )}
-          {articleType.config.process_model && (
+          {articleType.config.tasks?.process_with_llm?.model && (
             <Descriptions.Item label="文本处理模型">
-              {articleType.config.process_model}
+              {articleType.config.tasks.process_with_llm.model}
             </Descriptions.Item>
           )}
         </Descriptions>
@@ -234,7 +239,7 @@ const Settings = () => {
               header={
                 <span>
                   AI审阅模型配置
-                  {articleType?.config?.ai_review_model && (
+                  {articleType?.config?.tasks?.ai_review?.model && (
                     <Tag color="blue" style={{ marginLeft: 8 }}>可继承</Tag>
                   )}
                 </span>
@@ -289,7 +294,7 @@ const Settings = () => {
               header={
                 <span>
                   文本处理模型配置
-                  {articleType?.config?.process_model && (
+                  {articleType?.config?.tasks?.process_with_llm?.model && (
                     <Tag color="blue" style={{ marginLeft: 8 }}>可继承</Tag>
                   )}
                 </span>
