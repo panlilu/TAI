@@ -27,6 +27,7 @@ class JobTaskType(str, Enum):
     CONVERT_TO_MARKDOWN = "convert_to_markdown"
     PROCESS_WITH_LLM = "process_with_llm"
     PROCESS_AI_REVIEW = "process_ai_review"
+    EXTRACT_STRUCTURED_DATA = "extract_structured_data"
 
 class UserBase(BaseModel):
     username: str
@@ -85,12 +86,17 @@ class ArticleBase(BaseModel):
     article_type_id: int
 
 class ArticleCreate(ArticleBase):
-    pass
+    name: str
+    attachments: List[Dict[str, Any]] = []
+    article_type_id: int
+    project_id: int
 
 class Article(ArticleBase):
     id: int
     created_at: datetime
-
+    json_result: Dict = {}
+    project_id: int | None = None
+    
     model_config = {
         "from_attributes": True
     }
@@ -101,7 +107,9 @@ class Article(ArticleBase):
 
 class ArticleUpdate(BaseModel):
     name: Optional[str] = None
-    attachments: Optional[list[AttachmentSchema]] = None
+    attachments: Optional[List[Dict[str, Any]]] = None
+    article_type_id: Optional[int] = None
+    active_ai_review_report_id: Optional[int] = None
 
 class AttachmentUpdate(BaseModel):
     is_active: bool
@@ -121,7 +129,6 @@ class AIReviewReport(AIReviewReportBase):
     id: int
     article_id: int
     created_at: datetime
-    is_active: bool
     job_id: int | None
     status: str = "pending"
     structured_data: Optional[Dict[str, Any]] = None
@@ -137,7 +144,6 @@ class AIReviewReport(AIReviewReportBase):
 
 class AIReviewReportUpdate(BaseModel):
     source_data: Optional[str] = None
-    is_active: Optional[bool] = None
     status: Optional[str] = None
     structured_data: Optional[Dict[str, Any]] = None
 

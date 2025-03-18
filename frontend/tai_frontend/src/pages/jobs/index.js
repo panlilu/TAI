@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, message, Space, Progress, Collapse, Tag, InputNumber, Tooltip } from 'antd';
+import { Table, Button, message, Space, Progress, Collapse, Tag, InputNumber, Tooltip, Modal } from 'antd';
 import { 
   ReloadOutlined, 
   PauseCircleOutlined, 
@@ -7,7 +7,8 @@ import {
   StopOutlined,
   DownOutlined,
   RightOutlined,
-  SettingOutlined
+  SettingOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import request from '../../utils/request';
 
@@ -17,6 +18,9 @@ const Jobs = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedRowKeys, setExpandedRowKeys] = useState([]);
+  const [logModalVisible, setLogModalVisible] = useState(false);
+  const [currentLogs, setCurrentLogs] = useState('');
+  const [logModalTitle, setLogModalTitle] = useState('');
 
   const fetchData = async () => {
     setLoading(true);
@@ -151,14 +155,26 @@ const Jobs = () => {
     setExpandedRowKeys(newExpandedRowKeys);
   };
 
+  // 显示任务日志弹窗
+  const showTaskLogs = (task, jobName) => {
+    setCurrentLogs(task.logs || '暂无日志');
+    setLogModalTitle(`${jobName || `任务 #${task.job_id}`} - ${getTaskTypeText(task.task_type)}日志`);
+    setLogModalVisible(true);
+  };
+
+  // 关闭日志弹窗
+  const handleLogModalClose = () => {
+    setLogModalVisible(false);
+  };
+
   const renderTasksTable = (tasks) => {
     const taskColumns = [
-      {
-        title: 'ID',
-        dataIndex: 'id',
-        key: 'id',
-        width: 60
-      },
+      // {
+      //   title: 'ID',
+      //   dataIndex: 'id',
+      //   key: 'id',
+      //   width: 60
+      // },
       {
         title: '任务类型',
         dataIndex: 'task_type',
@@ -184,6 +200,18 @@ const Jobs = () => {
         key: 'action',
         render: (_, task) => (
           <Space>
+            <Button
+              type="link"
+              size="small"
+              icon={<FileTextOutlined />}
+              onClick={(e) => {
+                e.stopPropagation();
+                const job = data.find(j => j.id === task.job_id);
+                showTaskLogs(task, job?.name);
+              }}
+            >
+              查看日志
+            </Button>
             {task.status === 'failed' && (
               <Button
                 type="link"
@@ -266,12 +294,12 @@ const Jobs = () => {
         />
       )
     },
-    {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 60
-    },
+    // {
+    //   title: 'ID',
+    //   dataIndex: 'id',
+    //   key: 'id',
+    //   width: 60
+    // },
     {
       title: '任务名称',
       dataIndex: 'name',
@@ -400,6 +428,31 @@ const Jobs = () => {
           expandIcon: () => null
         }}
       />
+      
+      {/* 日志查看弹窗 */}
+      <Modal 
+        title={logModalTitle}
+        open={logModalVisible}
+        onCancel={handleLogModalClose}
+        footer={[
+          <Button key="close" onClick={handleLogModalClose}>
+            关闭
+          </Button>
+        ]}
+        width={800}
+      >
+        <pre style={{ 
+          maxHeight: '500px', 
+          overflowY: 'auto', 
+          backgroundColor: '#f5f5f5', 
+          padding: '12px',
+          borderRadius: '4px',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word'
+        }}>
+          {currentLogs}
+        </pre>
+      </Modal>
     </div>
   );
 };

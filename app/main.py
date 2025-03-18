@@ -460,9 +460,19 @@ async def update_ai_review(
     if db_ai_review is None:
         raise HTTPException(status_code=404, detail="AI review not found")
     
-    db_ai_review.source_data = ai_review.source_data
-    db_ai_review.structured_data = ai_review.structured_data
-    db_ai_review.is_active = ai_review.is_active
+    if ai_review.source_data is not None:
+        db_ai_review.source_data = ai_review.source_data
+    if ai_review.structured_data is not None:
+        db_ai_review.structured_data = ai_review.structured_data
+    if ai_review.status is not None:
+        db_ai_review.status = ai_review.status
+    
+    # 获取关联的文章
+    article = db.query(models.Article).filter(models.Article.id == db_ai_review.article_id).first()
+    if article:
+        # 更新文章的active_ai_review_report_id为当前ai_review_id
+        article.active_ai_review_report_id = ai_review_id
+    
     db.commit()
     db.refresh(db_ai_review)
     return db_ai_review

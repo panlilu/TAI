@@ -69,16 +69,28 @@ const ArticleViewer = () => {
         // 获取 AI review 内容
         const aiReviewResponse = await request(`/ai-reviews?article_id=${articleId}`);
         if (aiReviewResponse && aiReviewResponse.length > 0) {
-          // 取最新的一条记录
-          const latestReview = aiReviewResponse[0];
-          setAiReview(latestReview);
-          if (latestReview.processed_attachment_text) {
-            setMarkdownContent(latestReview.processed_attachment_text);
+          // 使用文章的active_ai_review_report_id获取活跃的审阅报告
+          const activeReviewId = response.active_ai_review_report_id;
+          let activeReview = null;
+          
+          if (activeReviewId) {
+            // 如果有活跃的review，查找对应的review
+            activeReview = aiReviewResponse.find(review => review.id === activeReviewId);
+          }
+          
+          // 如果没有找到活跃的review，使用最新的一个
+          if (!activeReview) {
+            activeReview = aiReviewResponse[0];
+          }
+          
+          setAiReview(activeReview);
+          if (activeReview.processed_attachment_text) {
+            setMarkdownContent(activeReview.processed_attachment_text);
           }
 
           // 如果存在AI审阅报告且正在处理中，启动实时更新
-          if (latestReview.status !== 'completed') {
-            connectToAIReviewEvents(latestReview.id);
+          if (activeReview.status !== 'completed') {
+            connectToAIReviewEvents(activeReview.id);
           }
         }
       } catch (error) {

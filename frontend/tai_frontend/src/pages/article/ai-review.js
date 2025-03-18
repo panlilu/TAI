@@ -14,6 +14,20 @@ const AIReview = ({ articleId, projectConfig }) => {
     try {
       const response = await request.get(`/ai-reviews?article_id=${articleId}`);
       if (response && response.length > 0) {
+        // 获取文章信息，查找active_ai_review_report_id
+        const articleResponse = await request.get(`/articles/${articleId}`);
+        const activeReviewId = articleResponse.active_ai_review_report_id;
+        
+        if (activeReviewId) {
+          // 如果有活跃的review，查找对应的review
+          const activeReview = response.find(review => review.id === activeReviewId);
+          if (activeReview) {
+            setAiReview(activeReview);
+            return;
+          }
+        }
+        
+        // 如果没有找到活跃的review，使用第一个
         setAiReview(response[0]);
       }
     } catch (error) {

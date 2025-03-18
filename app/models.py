@@ -39,6 +39,7 @@ class Article(Base):
     json_result = Column(JSON, nullable=False, server_default='{}')  # AI审阅结果
     project_id = Column(Integer, ForeignKey("projects.id"))  # 项目ID
     created_at = Column(DateTime(timezone=True), server_default=func.now())  # 创建时间
+    active_ai_review_report_id = Column(Integer, nullable=True)  # 当前激活的AI审阅报告ID
     
     article_type = relationship("ArticleType", back_populates="articles")
     project = relationship("Project", back_populates="articles")
@@ -54,8 +55,8 @@ class AIReviewReport(Base):
     processed_attachment_text = Column(Text)  # 处理后的附件文本内容
     created_at = Column(DateTime(timezone=True), server_default=func.now())  # 创建时间
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())  # 更新时间
-    is_active = Column(Boolean, default=False)  # 是否为当前激活的批阅报告
     status = Column(String, default="pending")  # pending, processing, completed, failed
+    structured_data = Column(JSON, nullable=True)  # 结构化的数据
     
     article = relationship("Article", back_populates="ai_reviews")
     job = relationship("Job")
