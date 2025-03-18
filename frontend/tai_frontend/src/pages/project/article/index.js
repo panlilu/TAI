@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Card, message, Button, Tabs, Space } from 'antd';
-import { FullscreenOutlined, FullscreenExitOutlined } from '@ant-design/icons';
+import { Card, message, Button, Tabs, Space, Dropdown, Menu } from 'antd';
+import { FullscreenOutlined, FullscreenExitOutlined, DownOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import 'github-markdown-css';
 import request from '../../../utils/request';
@@ -17,6 +17,9 @@ const ArticleViewer = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [aiReview, setAiReview] = useState(null);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [structuredData, setStructuredData] = useState(null);
+  const [isStructuredDataProcessing, setIsStructuredDataProcessing] = useState(false);
+  const [selectedAction, setSelectedAction] = useState('AI审阅');
 
   const connectToAIReviewEvents = (aiReviewId) => {
     setIsAiProcessing(true);
@@ -40,6 +43,40 @@ const ArticleViewer = () => {
       },
       () => {
         setIsAiProcessing(false);
+      }
+    );
+  };
+
+  // 连接结构化数据提取事件
+  const connectToStructuredDataEvents = (reportId) => {
+    setIsStructuredDataProcessing(true);
+    
+    eventService.connectToStructuredData(
+      reportId,
+      (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'content') {
+          // 如果数据是JSON格式的字符串，尝试解析
+          try {
+            const contentData = JSON.parse(data.content);
+            setStructuredData(prev => contentData);
+          } catch (e) {
+            // 如果不是JSON格式，作为普通文本处理
+            setStructuredData(prev => ({
+              ...prev,
+              raw_text: (prev?.raw_text || '') + data.content
+            }));
+          }
+
+          if (data.is_final) {
+            setIsStructuredDataProcessing(false);
+            eventService.disconnectStructuredData();
+          }
+        }
+      },
+      () => {
+        setIsStructuredDataProcessing(false);
       }
     );
   };
@@ -93,6 +130,21 @@ const ArticleViewer = () => {
             connectToAIReviewEvents(activeReview.id);
           }
         }
+        
+        // 获取结构化数据
+        try {
+          const structuredDataResponse = await request(`/structured-data?article_id=${articleId}`);
+          if (structuredDataResponse) {
+            setStructuredData(structuredDataResponse);
+          }
+        } catch (error) {
+          // 如果是404错误（暂无数据），不显示错误信息
+          if (error.response?.status !== 404) {
+            console.error('获取结构化数据失败', error);
+          } else {
+            console.log('暂无结构化数据');
+          }
+        }
       } catch (error) {
         message.error('获取文章详情失败');
       }
@@ -106,6 +158,7 @@ const ArticleViewer = () => {
         URL.revokeObjectURL(pdfUrl);
       }
       eventService.disconnectAIReview();
+      eventService.disconnectStructuredData();
     };
   }, [articleId]);
 
@@ -152,6 +205,53 @@ const ArticleViewer = () => {
     } catch (error) {
       setIsAiProcessing(false);
       message.error('创建AI处理任务失败');
+    }
+  };
+  
+  const handleExtractStructuredData = async () => {
+    try {
+      setIsStructuredDataProcessing(true);
+      const response = await request.post(`/articles/${articleId}/extract-structured-data`);
+      message.success('已创建结构化数据提取任务，请稍后在结构化数据标签页查看进度');
+      
+      // 如果有活跃的AI审阅报告，连接到结构化数据事件流
+      if (aiReview && aiReview.id) {
+        connectToStructuredDataEvents(aiReview.id);
+      }
+      
+      // 尝试获取结构化数据（可能刚开始还没准备好）
+      try {
+        const structuredDataResponse = await request(`/structured-data?article_id=${articleId}`);
+        if (structuredDataResponse) {
+          setStructuredData(structuredDataResponse);
+        }
+      } catch (error) {
+        // 结构化数据尚未准备好，稍后将通过事件更新自动更新
+        console.log('结构化数据尚未准备好，稍后将自动更新');
+      }
+    } catch (error) {
+      setIsStructuredDataProcessing(false);
+      message.error('创建结构化数据提取任务失败');
+    }
+  };
+
+  const handleActionSelect = ({ key }) => {
+    setSelectedAction(key);
+  };
+
+  const handleExecuteAction = () => {
+    switch (selectedAction) {
+      case '转换为Markdown':
+        handleConvertToMarkdown();
+        break;
+      case 'AI审阅':
+        handleAIProcess();
+        break;
+      case '提取结构化数据':
+        handleExtractStructuredData();
+        break;
+      default:
+        break;
     }
   };
 
@@ -201,6 +301,14 @@ const ArticleViewer = () => {
   if (!article) {
     return <div>加载中...</div>;
   }
+  
+  const menu = (
+    <Menu onClick={handleActionSelect} selectedKeys={[selectedAction]}>
+      <Menu.Item key="转换为Markdown">转换为Markdown</Menu.Item>
+      <Menu.Item key="AI审阅">AI审阅</Menu.Item>
+      <Menu.Item key="提取结构化数据">提取结构化数据</Menu.Item>
+    </Menu>
+  );
 
   const items = [
     {
@@ -257,6 +365,49 @@ const ArticleViewer = () => {
           )}
         </div>
       )
+    },
+    {
+      key: '4',
+      label: '结构化数据',
+      children: (
+        <div className="markdown-body" style={{ 
+          padding: '20px',
+          maxWidth: '900px',
+          margin: '0 auto',
+          backgroundColor: 'var(--color-canvas-default)',
+          color: 'var(--color-fg-default)',
+          position: 'relative'
+        }}>
+          {isStructuredDataProcessing && (
+            <div style={{ 
+              position: 'absolute', 
+              top: '10px', 
+              right: '10px', 
+              padding: '5px 10px',
+              background: '#1890ff',
+              color: 'white',
+              borderRadius: '4px'
+            }}>
+              正在提取...
+            </div>
+          )}
+          {structuredData ? (
+            <ReactMarkdown key={JSON.stringify(structuredData)}>
+              {typeof structuredData === 'string' 
+                ? structuredData
+                : "```yaml\n" + Object.entries(structuredData).map(([key, value]) => {
+                    if (Array.isArray(value)) {
+                      return `${key}:\n${value.map(item => `  - ${item}`).join('\n')}`;
+                    }
+                    return `${key}: ${value}`;
+                  }).join('\n') + "\n```"
+              }
+            </ReactMarkdown>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '20px' }}>暂无结构化数据</div>
+          )}
+        </div>
+      )
     }
   ];
 
@@ -267,8 +418,12 @@ const ArticleViewer = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{article.name}</span>
             <Space>
-              <Button onClick={handleConvertToMarkdown}>转换为Markdown</Button>
-              <Button type="primary" onClick={handleAIProcess}>AI审阅</Button>
+              <Dropdown menu={menu} trigger={['click']}>
+                <Button>
+                  {selectedAction} <DownOutlined />
+                </Button>
+              </Dropdown>
+              <Button type="primary" onClick={handleExecuteAction}>执行</Button>
               <Button 
                 type="text" 
                 icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />} 

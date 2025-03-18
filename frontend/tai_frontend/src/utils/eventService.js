@@ -7,6 +7,7 @@ class EventService {
   constructor() {
     this.eventSource = null;
     this.aiReviewEventSource = null;
+    this.structuredDataEventSource = null;
     this.eventListeners = {
       job_update: [],
       task_update: [],
@@ -111,6 +112,38 @@ class EventService {
     if (this.aiReviewEventSource) {
       this.aiReviewEventSource.close();
       this.aiReviewEventSource = null;
+    }
+  }
+
+  connectToStructuredData(reportId, onMessage, onError) {
+    if (this.structuredDataEventSource) {
+      this.structuredDataEventSource.close();
+    }
+
+    const token = getToken();
+    if (!token) return;
+
+    this.structuredDataEventSource = new EventSourcePolyfill(
+      `${config.apiBaseURL}/events_structured_data/${reportId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    this.structuredDataEventSource.onmessage = onMessage;
+    this.structuredDataEventSource.onerror = (error) => {
+      console.error('Structured Data SSE Error:', error);
+      this.structuredDataEventSource.close();
+      if (onError) onError(error);
+    };
+  }
+
+  disconnectStructuredData() {
+    if (this.structuredDataEventSource) {
+      this.structuredDataEventSource.close();
+      this.structuredDataEventSource = null;
     }
   }
 }

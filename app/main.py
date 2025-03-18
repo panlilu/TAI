@@ -318,17 +318,18 @@ async def create_article_review(
 ):
     # 检查文章是否存在
     article = db.query(models.Article).filter(models.Article.id == article_id).first()
-    if article is None:
+    if not article:
         raise HTTPException(status_code=404, detail="Article not found")
     
-    # 检查文章是否属于项目
-    if not article.project_id:
-        raise HTTPException(status_code=400, detail="Article must belong to a project")
+    # 检查项目是否属于当前用户
+    project = db.query(models.Project).filter(models.Project.id == article.project_id).first()
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this article")
     
-    # 创建job记录
+    # 创建一个新的Job
     db_job = models.Job(
+        name=f"AI Review for {article.name}",
         project_id=article.project_id,
-        name=f"AI Review for Article #{article_id}",
         status=schemas.JobStatus.PENDING,
         progress=0,
         logs="",
@@ -336,28 +337,100 @@ async def create_article_review(
     )
     db.add(db_job)
     db.commit()
-    db.refresh(db_job)
     
-    # 创建任务记录
-    db_task = models.JobTask(
+    # 创建任务
+    convert_task = models.JobTask(
+        job_id=db_job.id,
+        task_type=schemas.JobTaskType.CONVERT_TO_MARKDOWN,
+        status=schemas.JobStatus.PENDING,
+        article_id=article_id
+    )
+    db.add(convert_task)
+    
+    llm_task = models.JobTask(
+        job_id=db_job.id,
+        task_type=schemas.JobTaskType.PROCESS_WITH_LLM,
+        status=schemas.JobStatus.PENDING,
+        article_id=article_id
+    )
+    db.add(llm_task)
+    
+    ai_review_task = models.JobTask(
         job_id=db_job.id,
         task_type=schemas.JobTaskType.PROCESS_AI_REVIEW,
         status=schemas.JobStatus.PENDING,
-        progress=0,
-        logs="",
         article_id=article_id
     )
-    db.add(db_task)
+    db.add(ai_review_task)
     db.commit()
     
-    # 调度任务
+    # 启动任务
     task_queue.enqueue(
         tasks.schedule_job_tasks,
         args=(db_job.id,)
     )
     
-    # 刷新job以获取关联的tasks
-    db.refresh(db_job)
+    return db_job
+
+@api_app.post("/articles/{article_id}/extract-structured-data", response_model=schemas.Job, tags=["AI Review Management"])
+async def extract_article_structured_data(
+    article_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 检查文章是否存在
+    article = db.query(models.Article).filter(models.Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    # 检查项目是否属于当前用户
+    project = db.query(models.Project).filter(models.Project.id == article.project_id).first()
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this article")
+    
+    # 检查文章是否有AI审阅报告
+    ai_review = None
+    if article.active_ai_review_report_id:
+        ai_review = db.query(models.AIReviewReport).filter(
+            models.AIReviewReport.id == article.active_ai_review_report_id
+        ).first()
+    
+    if not ai_review:
+        ai_review = db.query(models.AIReviewReport).filter(
+            models.AIReviewReport.article_id == article_id
+        ).order_by(models.AIReviewReport.created_at.desc()).first()
+    
+    if not ai_review or not ai_review.review_content:
+        raise HTTPException(status_code=400, detail="Article doesn't have an AI review report")
+    
+    # 创建一个新的Job
+    db_job = models.Job(
+        name=f"Extract Structured Data for {article.name}",
+        project_id=article.project_id,
+        status=schemas.JobStatus.PENDING,
+        progress=0,
+        logs="",
+        parallelism=1
+    )
+    db.add(db_job)
+    db.commit()
+    
+    # 创建任务
+    extract_task = models.JobTask(
+        job_id=db_job.id,
+        task_type=schemas.JobTaskType.EXTRACT_STRUCTURED_DATA,
+        status=schemas.JobStatus.PENDING,
+        article_id=article_id
+    )
+    db.add(extract_task)
+    db.commit()
+    
+    # 启动任务
+    task_queue.enqueue(
+        tasks.schedule_job_tasks,
+        args=(db_job.id,)
+    )
+    
     return db_job
 
 @api_app.delete("/articles", tags=["Article Management"])
@@ -444,10 +517,48 @@ async def get_ai_reviews(
     current_user: models.User = Depends(auth.get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    ai_reviews = db.query(models.AIReviewReport).filter(
-        models.AIReviewReport.article_id == article_id
-    ).offset(skip).limit(limit).all()
+    # 检查文章是否存在且属于当前用户
+    article = db.query(models.Article).filter(models.Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    project = db.query(models.Project).filter(models.Project.id == article.project_id).first()
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this article")
+    
+    ai_reviews = db.query(models.AIReviewReport).filter(models.AIReviewReport.article_id == article_id).offset(skip).limit(limit).all()
     return ai_reviews
+
+@api_app.get("/structured-data", tags=["AI Review Management"])
+async def get_structured_data(
+    article_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 检查文章是否存在且属于当前用户
+    article = db.query(models.Article).filter(models.Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    project = db.query(models.Project).filter(models.Project.id == article.project_id).first()
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this article")
+    
+    # 获取文章当前活跃的AI审阅报告
+    if article.active_ai_review_report_id:
+        ai_review = db.query(models.AIReviewReport).filter(
+            models.AIReviewReport.id == article.active_ai_review_report_id
+        ).first()
+    else:
+        # 如果没有活跃报告，获取最新的报告
+        ai_review = db.query(models.AIReviewReport).filter(
+            models.AIReviewReport.article_id == article_id
+        ).order_by(models.AIReviewReport.created_at.desc()).first()
+    
+    if not ai_review or not ai_review.structured_data:
+        raise HTTPException(status_code=404, detail="Structured data not found")
+    
+    return ai_review.structured_data
 
 @api_app.put("/ai-reviews/{ai_review_id}", response_model=schemas.AIReviewReport, tags=["AI Review Management"])
 async def update_ai_review(

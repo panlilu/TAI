@@ -18,6 +18,8 @@ from .file_converter import convert_file_to_markdown
 from redis import Redis
 from rq import Queue
 import logging
+import re
+import yaml
 
 ALLOWED_EXTENSIONS = {'.md', '.doc', '.pdf', '.txt', '.docx'}
 ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.bmp'}
@@ -1221,7 +1223,7 @@ def extract_structured_data_task(task_id: int, article_id: int):
             return
             
         # 获取审阅内容
-        review_content = ai_review.review_content
+        review_content = ai_review.source_data
         if not review_content:
             error_msg = "错误：AI审阅报告中缺少内容"
             task.logs += f"【错误】{error_msg}\n"
@@ -1316,14 +1318,20 @@ suggestions:
             db.commit()
             
             # 从YAML内容中提取```yaml和```之间的内容
-            import re
             yaml_pattern = r"```(?:yaml)?\n(.*?)```"
             match = re.search(yaml_pattern, yaml_content, re.DOTALL)
             if match:
                 yaml_content = match.group(1)
             
-            # 保存结构化数据
-            ai_review.structured_data = yaml_content
+            # 将YAML字符串解析为Python字典
+            try:
+                structured_data_dict = yaml.safe_load(yaml_content)
+            except Exception as e:
+                task.logs += f"【警告】YAML解析失败：{str(e)}，将尝试使用原始文本\n"
+                structured_data_dict = {"raw_text": yaml_content}
+            
+            # 保存结构化数据（确保是字典格式）
+            ai_review.structured_data = structured_data_dict
             db.commit()
             
             task.logs += "【信息】结构化数据已保存\n"
