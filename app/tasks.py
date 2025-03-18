@@ -235,18 +235,20 @@ def execute_task(task_id: int):
             
     except Exception as e:
         logging.error(f"执行任务 {task_id} 出错: {str(e)}")
-        db.query(JobTask).filter(JobTask.id == task_id).update(
-            {"status": JobStatus.FAILED, "logs": f"【错误】执行失败: {str(e)}"}
-        )
-        db.commit()
+        task = db.query(JobTask).filter(JobTask.id == task_id).first()
+        if task:
+            task.status = JobStatus.FAILED
+            # 追加错误日志而不是覆盖
+            task.logs = task.logs + f"\n【错误】执行失败: {str(e)}" if task.logs else f"【错误】执行失败: {str(e)}"
+            db.commit()
         
         # 更新job_tasks计数
-        task = db.query(JobTask).filter(JobTask.id == task_id).first()
         if task and task.job_id in job_tasks:
             job_tasks[task.job_id] = max(0, job_tasks[task.job_id] - 1)
         
         # 即使任务失败，也调度下一个任务
-        task_queue.enqueue(schedule_job_tasks, args=(db.query(JobTask).filter(JobTask.id == task_id).first().job_id,))
+        if task:
+            task_queue.enqueue(schedule_job_tasks, args=(task.job_id,))
         raise
     finally:
         db.close()
@@ -351,7 +353,9 @@ def convert_to_markdown_task(task_id: int, article_id: int):
         if not article:
             error_msg = f"错误：找不到文章ID {article_id}"
             task.logs += f"【错误】{error_msg}\n"
-            raise Exception(error_msg)
+            task.status = JobStatus.FAILED
+            db.commit()
+            return
 
         task.logs += f"【信息】正在处理文章: {article.name}，ID: {article.id}\n"
         db.commit()
@@ -520,6 +524,8 @@ def process_with_llm_task(task_id: int, article_id: int):
         task.status = JobStatus.PROCESSING
         task.progress = 0
         task.logs = "【开始】开始处理文档内容生成AI审阅报告...\n"
+        db.commit()
+        
         task.logs += f"【信息】Markdown转换任务 {markdown_task.id} 已完成，继续处理\n"
         db.commit()
 
@@ -528,6 +534,7 @@ def process_with_llm_task(task_id: int, article_id: int):
         if not article:
             error_msg = f"错误：找不到文章ID {article_id}"
             task.logs += f"【错误】{error_msg}\n"
+            db.commit()
             raise Exception(error_msg)
 
         task.logs += f"【信息】正在处理文章: {article.name}，ID: {article.id}\n"
@@ -538,6 +545,7 @@ def process_with_llm_task(task_id: int, article_id: int):
         if not project:
             error_msg = "错误：找不到项目信息"
             task.logs += f"【错误】{error_msg}\n"
+            db.commit()
             raise Exception(error_msg)
 
         task.logs += f"【信息】项目名称: {project.name}，ID: {project.id}\n"
@@ -551,12 +559,14 @@ def process_with_llm_task(task_id: int, article_id: int):
         if not ai_review:
             error_msg = "错误：找不到AI审阅报告"
             task.logs += f"【错误】{error_msg}\n"
+            db.commit()
             raise Exception(error_msg)
             
         # 检查是否已经有Markdown格式的文本
         if not ai_review.processed_attachment_text:
             error_msg = "错误：AI审阅报告中缺少处理后的文档内容"
             task.logs += f"【错误】{error_msg}\n"
+            db.commit()
             raise Exception(error_msg)
             
         markdown_text = ai_review.processed_attachment_text
@@ -710,6 +720,7 @@ def process_ai_review_task(task_id: int, article_id: int):
         if not article:
             error_msg = f"错误：找不到文章ID {article_id}"
             task.logs += f"【错误】{error_msg}\n"
+            db.commit()
             raise Exception(error_msg)
 
         task.logs += f"【信息】正在处理文章: {article.name}，ID: {article.id}\n"
@@ -720,6 +731,7 @@ def process_ai_review_task(task_id: int, article_id: int):
         if not project:
             error_msg = "错误：找不到项目信息"
             task.logs += f"【错误】{error_msg}\n"
+            db.commit()
             raise Exception(error_msg)
 
         task.logs += f"【信息】项目名称: {project.name}，ID: {project.id}\n"
@@ -766,8 +778,9 @@ def process_ai_review_task(task_id: int, article_id: int):
         if project.config and project.config.get('auto_set_status'):
             article.status = "reviewed"
             task.logs += "【信息】已自动将文章状态设置为已审阅\n"
-        
-        db.commit()
+            db.commit()
+        else:
+            db.commit()
         
         task.logs += "【信息】已保存AI审阅结果\n"
         db.commit()

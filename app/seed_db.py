@@ -69,13 +69,15 @@ def seed_database():
                 "language": "zh",
                 "tasks": {
                     "process_with_llm": {
-                        "model": "deepseek/deepseek-chat",
+                        # "model": "deepseek/deepseek-chat",
+                        "model": "openrouter/qwen/qwq-32b:free",
                         "temperature": 0.7,
                         "max_tokens": 2000,
                         "top_p": 0.95
                     },
                     "ai_review": {
-                        "model": "deepseek/deepseek-reason",
+                        # "model": "deepseek/deepseek-reason",
+                        "model": "openrouter/qwen/qwq-32b:free",
                         "temperature": 0.3,
                         "max_tokens": 4000,
                         "top_p": 0.9
