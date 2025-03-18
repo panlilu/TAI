@@ -14,8 +14,8 @@ description = "DeepSeek Reason是一个专注于推理能力的模型，适合�
 
 [[models]]
 id = "openrouter/qwen/qwq-32b:free"
-name = "Qwen 32B"
-description = "Qwen 32B是一个大规模预训练模型，提供免费使用的版本，适合多种复杂任务"
+name = "QwQ 32B"
+description = "QwQ 32B 是一个大规模预训练模型，提供免费使用的版本，适合多种复杂任务"
 
 # 任务配置
 [tasks]

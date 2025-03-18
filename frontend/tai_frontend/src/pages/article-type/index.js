@@ -3,8 +3,6 @@ import { Table, Button, Modal, Form, Input, message, Popconfirm, Switch, Select,
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
 
-const { Panel } = Collapse;
-
 const ArticleType = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -175,6 +173,110 @@ const ArticleType = () => {
     },
   ];
 
+  // 定义Collapse的items配置
+  const collapseItems = [
+    {
+      key: 'ai_review',
+      label: 'AI审阅模型配置',
+      children: (
+        <>
+          <Form.Item
+            name="ai_review_model"
+            label="AI审阅模型"
+            help="选择用于AI审阅任务的模型"
+          >
+            <Select placeholder="选择模型">
+              {aiReviewModels.map(model => (
+                <Select.Option key={model.id} value={model.id}>
+                  {model.name} - {model.description}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <Form.Item
+              name="ai_review_temperature"
+              label="温度"
+              style={{ flex: 1 }}
+              help="控制输出的随机性，值越低越确定"
+            >
+              <InputNumber min={0} max={1} step={0.1} />
+            </Form.Item>
+
+            <Form.Item
+              name="ai_review_max_tokens"
+              label="最大Token数"
+              style={{ flex: 1 }}
+              help="生成文本的最大长度"
+            >
+              <InputNumber min={100} max={8000} step={100} />
+            </Form.Item>
+
+            <Form.Item
+              name="ai_review_top_p"
+              label="Top P"
+              style={{ flex: 1 }}
+              help="控制输出的多样性"
+            >
+              <InputNumber min={0} max={1} step={0.05} />
+            </Form.Item>
+          </div>
+        </>
+      )
+    },
+    {
+      key: 'process_llm',
+      label: '文本处理模型配置',
+      children: (
+        <>
+          <Form.Item
+            name="process_model"
+            label="文本处理模型"
+            help="选择用于文本处理任务的模型"
+          >
+            <Select placeholder="选择模型">
+              {processWithLlmModels.map(model => (
+                <Select.Option key={model.id} value={model.id}>
+                  {model.name} - {model.description}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <Form.Item
+              name="process_temperature"
+              label="温度"
+              style={{ flex: 1 }}
+              help="控制输出的随机性，值越低越确定"
+            >
+              <InputNumber min={0} max={1} step={0.1} />
+            </Form.Item>
+
+            <Form.Item
+              name="process_max_tokens"
+              label="最大Token数"
+              style={{ flex: 1 }}
+              help="生成文本的最大长度"
+            >
+              <InputNumber min={100} max={8000} step={100} />
+            </Form.Item>
+
+            <Form.Item
+              name="process_top_p"
+              label="Top P"
+              style={{ flex: 1 }}
+              help="控制输出的多样性"
+            >
+              <InputNumber min={0} max={1} step={0.05} />
+            </Form.Item>
+          </div>
+        </>
+      )
+    }
+  ];
+
   return (
     <div>
       <Button
@@ -279,97 +381,7 @@ const ArticleType = () => {
             </Form.Item>
           </div>
 
-          <Collapse style={{ marginBottom: 16 }}>
-            <Panel header="AI审阅模型配置" key="ai_review">
-              <Form.Item
-                name="ai_review_model"
-                label="AI审阅模型"
-                help="选择用于AI审阅任务的模型"
-              >
-                <Select placeholder="选择模型">
-                  {aiReviewModels.map(model => (
-                    <Select.Option key={model.id} value={model.id}>
-                      {model.name} - {model.description}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <Form.Item
-                  name="ai_review_temperature"
-                  label="温度"
-                  style={{ flex: 1 }}
-                  help="控制输出的随机性，值越低越确定"
-                >
-                  <InputNumber min={0} max={1} step={0.1} />
-                </Form.Item>
-
-                <Form.Item
-                  name="ai_review_max_tokens"
-                  label="最大Token数"
-                  style={{ flex: 1 }}
-                  help="生成文本的最大长度"
-                >
-                  <InputNumber min={100} max={8000} step={100} />
-                </Form.Item>
-
-                <Form.Item
-                  name="ai_review_top_p"
-                  label="Top P"
-                  style={{ flex: 1 }}
-                  help="控制输出的多样性"
-                >
-                  <InputNumber min={0} max={1} step={0.05} />
-                </Form.Item>
-              </div>
-            </Panel>
-
-            <Panel header="文本处理模型配置" key="process_llm">
-              <Form.Item
-                name="process_model"
-                label="文本处理模型"
-                help="选择用于文本处理任务的模型"
-              >
-                <Select placeholder="选择模型">
-                  {processWithLlmModels.map(model => (
-                    <Select.Option key={model.id} value={model.id}>
-                      {model.name} - {model.description}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <div style={{ display: 'flex', gap: '16px' }}>
-                <Form.Item
-                  name="process_temperature"
-                  label="温度"
-                  style={{ flex: 1 }}
-                  help="控制输出的随机性，值越低越确定"
-                >
-                  <InputNumber min={0} max={1} step={0.1} />
-                </Form.Item>
-
-                <Form.Item
-                  name="process_max_tokens"
-                  label="最大Token数"
-                  style={{ flex: 1 }}
-                  help="生成文本的最大长度"
-                >
-                  <InputNumber min={100} max={8000} step={100} />
-                </Form.Item>
-
-                <Form.Item
-                  name="process_top_p"
-                  label="Top P"
-                  style={{ flex: 1 }}
-                  help="控制输出的多样性"
-                >
-                  <InputNumber min={0} max={1} step={0.05} />
-                </Form.Item>
-              </div>
-            </Panel>
-          </Collapse>
+          <Collapse items={collapseItems} style={{ marginBottom: 16 }} />
 
           <Form.Item
             name="is_public"
