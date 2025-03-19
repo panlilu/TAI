@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Table, Button, Input, Form, Upload, message, Tabs, Space, Select, Switch } from 'antd';
+import { Card, Table, Button, Input, Form, Upload, message, Tabs, Space, Switch, Alert, Divider } from 'antd';
 import { UploadOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
 import config from '../../config';
+import ArticleTypeConfigForm from '../../components/ArticleTypeConfigForm';
 
 // const { TextArea } = Input;
 
@@ -14,18 +15,34 @@ const ProjectDetail = () => {
   const [articles, setArticles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [settingsForm] = Form.useForm();  // 为项目设置添加单独的 form 实例
+  const [articleType, setArticleType] = useState(null); // 添加文章类型状态
 
   // 使用useCallback来缓存函数
   const fetchProject = useCallback(async () => {
     try {
       const response = await request(`/projects/${id}`);
       setProject(response);
+      
+      // 加载文章类型信息
+      if (response.article_type_id) {
+        try {
+          const articleTypeData = await request.get(`/article-types/${response.article_type_id}`);
+          setArticleType(articleTypeData);
+        } catch (error) {
+          console.error('获取文章类型失败', error);
+        }
+      }
+      
       settingsForm.setFieldsValue({
         name: response.name,
         auto_approve: response.auto_approve,
+        // 设置LLM配置的初始值
+        process_model: response.config?.tasks?.process_with_llm?.model || '',
+        process_temperature: response.config?.tasks?.process_with_llm?.temperature || 0.7,
+        process_max_tokens: response.config?.tasks?.process_with_llm?.max_tokens || 2000,
+        process_top_p: response.config?.tasks?.process_with_llm?.top_p || 0.95,
         // 从process_with_llm中获取prompt
-        prompt: response.config?.tasks?.process_with_llm?.prompt || '',
-        format_prompt: response.config?.format_prompt || '',
+        process_prompt: response.config?.tasks?.process_with_llm?.prompt || '',
         review_criteria: response.config?.review_criteria || '',
         language: response.config?.language || 'zh'
       });
@@ -137,8 +154,6 @@ const ProjectDetail = () => {
       const formData = {
         name: values.name,
         config: {
-          prompt: values.prompt,
-          format_prompt: values.format_prompt,
           review_criteria: values.review_criteria,
           language: values.language || 'zh',
           tasks: {
@@ -147,6 +162,7 @@ const ProjectDetail = () => {
               temperature: values.process_temperature || 0.7,
               max_tokens: values.process_max_tokens || 2000,
               top_p: values.process_top_p || 0.95,
+              prompt: values.process_prompt || '',
             }
           }
         },
@@ -161,6 +177,34 @@ const ProjectDetail = () => {
     }
   };
 
+  // 渲染继承的配置
+  const renderInheritedConfig = () => {
+    if (!articleType) return null;
+    
+    return (
+      <div className="inherited-config">
+        <h4>继承自文章类型的配置</h4>
+        <Divider />
+        
+        {articleType.config?.tasks?.process_with_llm?.prompt && (
+          <div className="config-item">
+            <h5>提示词</h5>
+            <div className="pre-wrap">{articleType.config.tasks.process_with_llm.prompt}</div>
+          </div>
+        )}
+        {articleType?.config?.tasks?.process_with_llm?.prompt && (
+          <Alert 
+            message="提示词已从文章类型继承" 
+            description="如果设置了新的提示词，将覆盖从文章类型继承的提示词。" 
+            type="info" 
+            showIcon 
+            style={{ marginBottom: '20px' }}
+          />
+        )}
+      </div>
+    );
+  };
+
   // 渲染项目设定
   const renderProjectSettings = () => {
     if (!project) {
@@ -169,10 +213,19 @@ const ProjectDetail = () => {
     
     return (
       <Card title="项目设定" bordered={false}>
+        {renderInheritedConfig()}
+        
         <Form
           form={settingsForm}
           layout="vertical"
           onFinish={handleUpdateSettings}
+          initialValues={{
+            auto_approve: false,
+            language: 'zh',
+            process_temperature: 0.7,
+            process_max_tokens: 2000,
+            process_top_p: 0.95,
+          }}
         >
           <Form.Item
             name="name"
@@ -182,35 +235,15 @@ const ProjectDetail = () => {
             <Input />
           </Form.Item>
 
-          <Form.Item
-            name="prompt"
-            label={
-              <span>
-                提示词
-              </span>
-            }
-            help="如果不设置，将使用文章类型中的提示词"
-          >
-            <Input.TextArea rows={6} />
-          </Form.Item>
-
-          <Form.Item
-            name="review_criteria"
-            label="评审标准"
-            help="设置具体的评审标准和要求"
-          >
-            <Input.TextArea rows={4} />
-          </Form.Item>
-
-          <Form.Item
-            name="language"
-            label="语言"
-          >
-            <Select>
-              <Select.Option value="zh">中文</Select.Option>
-              <Select.Option value="en">English</Select.Option>
-            </Select>
-          </Form.Item>
+          <ArticleTypeConfigForm 
+            form={settingsForm} 
+            showBasicSettings={false}
+            initialValues={{
+              process_temperature: 0.7,
+              process_max_tokens: 2000,
+              process_top_p: 0.95,
+            }}
+          />
 
           <Form.Item
             name="auto_approve"
