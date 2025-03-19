@@ -12,6 +12,7 @@ const ArticleType = () => {
   const [aiReviewModels, setAiReviewModels] = useState([]);
   const [processWithLlmModels, setProcessWithLlmModels] = useState([]);
   const [imageDescriptionModels, setImageDescriptionModels] = useState([]);
+  const [extractStructuredDataModels, setExtractStructuredDataModels] = useState([]);
   const [showImageDescriptionOptions, setShowImageDescriptionOptions] = useState(false);
 
   const fetchData = async () => {
@@ -41,6 +42,10 @@ const ArticleType = () => {
       // 获取图片描述可用的模型
       const imageDescriptionModelsData = await request.get('/tasks/convert_to_markdown/image_description_models');
       setImageDescriptionModels(imageDescriptionModelsData);
+      
+      // 获取结构化数据提取任务可用的模型
+      const extractStructuredDataModelsData = await request.get('/tasks/extract_structured_data/models');
+      setExtractStructuredDataModels(extractStructuredDataModelsData);
     } catch (error) {
       message.error('获取模型配置失败');
     }
@@ -80,6 +85,12 @@ const ArticleType = () => {
       process_temperature: record.config?.tasks?.process_with_llm?.temperature || 0.7,
       process_max_tokens: record.config?.tasks?.process_with_llm?.max_tokens || 2000,
       process_top_p: record.config?.tasks?.process_with_llm?.top_p || 0.95,
+      // 结构化数据提取配置
+      extract_structured_data_model: record.config?.tasks?.extract_structured_data?.model || '',
+      extract_structured_data_temperature: record.config?.tasks?.extract_structured_data?.temperature || 0.2,
+      extract_structured_data_max_tokens: record.config?.tasks?.extract_structured_data?.max_tokens || 3000,
+      extract_structured_data_top_p: record.config?.tasks?.extract_structured_data?.top_p || 0.8,
+      extract_structured_data_extraction_prompt: record.config?.tasks?.extract_structured_data?.extraction_prompt || '',
     });
     setShowImageDescriptionOptions(record.config?.tasks?.convert_to_markdown?.conversion_type === 'advanced');
     setEditingId(record.id);
@@ -126,6 +137,13 @@ const ArticleType = () => {
               temperature: values.process_temperature || 0.7,
               max_tokens: values.process_max_tokens || 2000,
               top_p: values.process_top_p || 0.95,
+            },
+            extract_structured_data: {
+              model: values.extract_structured_data_model || '',
+              temperature: values.extract_structured_data_temperature || 0.2,
+              max_tokens: values.extract_structured_data_max_tokens || 3000,
+              top_p: values.extract_structured_data_top_p || 0.8,
+              extraction_prompt: values.extract_structured_data_extraction_prompt || '',
             }
           }
         }
@@ -340,6 +358,64 @@ const ArticleType = () => {
           </div>
         </>
       )
+    },
+    {
+      key: 'extract_structured_data',
+      label: '结构化数据提取配置',
+      children: (
+        <>
+          <Form.Item
+            name="extract_structured_data_model"
+            label="数据提取模型"
+            help="选择用于结构化数据提取任务的模型"
+          >
+            <Select placeholder="选择模型">
+              {extractStructuredDataModels.map(model => (
+                <Select.Option key={model.id} value={model.id}>
+                  {model.name} - {model.description}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <Form.Item
+              name="extract_structured_data_temperature"
+              label="温度"
+              style={{ flex: 1 }}
+              help="控制输出的随机性，值越低越确定"
+            >
+              <InputNumber min={0} max={1} step={0.1} />
+            </Form.Item>
+
+            <Form.Item
+              name="extract_structured_data_max_tokens"
+              label="最大Token数"
+              style={{ flex: 1 }}
+              help="生成文本的最大长度"
+            >
+              <InputNumber min={100} max={8000} step={100} />
+            </Form.Item>
+
+            <Form.Item
+              name="extract_structured_data_top_p"
+              label="Top P"
+              style={{ flex: 1 }}
+              help="控制输出的多样性"
+            >
+              <InputNumber min={0} max={1} step={0.05} />
+            </Form.Item>
+          </div>
+
+          <Form.Item
+            name="extract_structured_data_extraction_prompt"
+            label="提取提示词"
+            help="用于指导结构化数据提取的提示词"
+          >
+            <Input.TextArea rows={6} />
+          </Form.Item>
+        </>
+      )
     }
   ];
 
@@ -384,6 +460,9 @@ const ArticleType = () => {
             process_temperature: 0.7,
             process_max_tokens: 2000,
             process_top_p: 0.95,
+            extract_structured_data_temperature: 0.2,
+            extract_structured_data_max_tokens: 3000,
+            extract_structured_data_top_p: 0.8,
           }}
         >
           <Form.Item

@@ -20,6 +20,7 @@ const ArticleViewer = () => {
   const [structuredData, setStructuredData] = useState(null);
   const [isStructuredDataProcessing, setIsStructuredDataProcessing] = useState(false);
   const [selectedAction, setSelectedAction] = useState('AI审阅');
+  // eslint-disable-next-line no-unused-vars
   const [structuredDataNotFound, setStructuredDataNotFound] = useState(false);
 
   const connectToAIReviewEvents = (aiReviewId) => {
@@ -82,6 +83,7 @@ const ArticleViewer = () => {
     );
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const fetchArticle = async () => {
       try {
@@ -137,11 +139,10 @@ const ArticleViewer = () => {
         
         // 获取结构化数据
         try {
-          if (!structuredDataNotFound) {
-            const structuredDataResponse = await request(`/structured-data?article_id=${articleId}`);
-            if (structuredDataResponse) {
-              setStructuredData(structuredDataResponse);
-            }
+          const structuredDataResponse = await request(`/structured-data?article_id=${articleId}`);
+          if (structuredDataResponse) {
+            setStructuredData(structuredDataResponse);
+            setStructuredDataNotFound(false);
           }
         } catch (error) {
           if (error.response?.status === 404) {
@@ -160,13 +161,17 @@ const ArticleViewer = () => {
 
     // Cleanup function
     return () => {
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl);
-      }
+      // 清理PDF URL
+      setPdfUrl(prev => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
       eventService.disconnectAIReview();
       eventService.disconnectStructuredData();
     };
-  }, [articleId]);
+  }, [articleId]); // 显式忽略structuredDataNotFound和pdfUrl作为依赖项
 
   const handleConvertToMarkdown = async () => {
     try {

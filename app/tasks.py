@@ -1330,8 +1330,6 @@ suggestions:
   - 第一个建议
   - 第二个建议
 ```
-
-审阅报告:
 """)
 
         try:
@@ -1357,7 +1355,7 @@ suggestions:
             db.commit()
                 
             # 使用AI模型提取结构化数据
-            prompt = f"{extraction_prompt}\n\n{review_content}"
+            prompt = f"{extraction_prompt}\n\n审阅报告:\n{review_content}"
             
             response = completion(
                 model=model,
