@@ -191,6 +191,23 @@ async def get_article_types(
     ).offset(skip).limit(limit).all()
     return article_types
 
+@api_app.get("/article-types/{article_type_id}", response_model=schemas.ArticleType, tags=["Article Type Management"])
+async def get_article_type(
+    article_type_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 获取单个文章类型
+    db_article_type = db.query(models.ArticleType).filter(models.ArticleType.id == article_type_id).first()
+    if db_article_type is None:
+        raise HTTPException(status_code=404, detail="Article type not found")
+    
+    # 检查访问权限：公共类型或者属于当前用户
+    if not db_article_type.is_public and db_article_type.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this article type")
+    
+    return db_article_type
+
 @api_app.put("/article-types/{article_type_id}", response_model=schemas.ArticleType, tags=["Article Type Management"])
 async def update_article_type(
     article_type_id: int,
@@ -682,26 +699,8 @@ async def update_project(
     if project.name is not None:
         db_project.name = project.name
     if project.config is not None:
-        # 如果配置字段存在，则合并配置
-        current_config = db_project.config or {}
-        
-        # 确保tasks字段存在
-        if "tasks" not in current_config:
-            current_config["tasks"] = {}
-        
-        # 合并tasks配置
-        if "tasks" in project.config:
-            for task_type, task_config in project.config["tasks"].items():
-                if task_type not in current_config["tasks"]:
-                    current_config["tasks"][task_type] = {}
-                current_config["tasks"][task_type].update(task_config)
-        
-        # 合并其他配置
-        for key, value in project.config.items():
-            if key != "tasks":
-                current_config[key] = value
-        
-        db_project.config = current_config
+        # 直接覆盖整个配置，不再合并
+        db_project.config = project.config
     if project.auto_approve is not None:
         db_project.auto_approve = project.auto_approve
     

@@ -83,18 +83,17 @@ def seed_database():
             is_public=True,
             config={
                 "tasks": {
+                    "convert_to_markdown": {
+                        "type": "simple",
+                        "enable_image_description": False,
+                        "image_description_model": "lm_studio/qwen2.5-vl-7b-instruct"
+                    },
                     "process_with_llm": {
                         "prompt": prompt,
                         "model": "openrouter/qwen/qwq-32b:free",
                         "temperature": 0.7,
                         "max_tokens": 2000,
                         "top_p": 0.95
-                    },
-                    "ai_review": {
-                        "model": "openrouter/qwen/qwq-32b:free",
-                        "temperature": 0.3,
-                        "max_tokens": 4000,
-                        "top_p": 0.9
                     },
                     "extract_structured_data": {
                         "model": "openrouter/qwen/qwq-32b:free",

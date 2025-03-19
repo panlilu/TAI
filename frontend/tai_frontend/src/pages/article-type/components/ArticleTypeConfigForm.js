@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Select, Input, InputNumber, Switch, Collapse } from 'antd';
-import request from '../../utils/request';
+import request from '../../../utils/request';
 
-const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = true }) => {
+const ArticleTypeConfigForm = ({ form, showBasicSettings = true }) => {
   const [processWithLlmModels, setProcessWithLlmModels] = useState([]);
   const [imageDescriptionModels, setImageDescriptionModels] = useState([]);
   const [extractStructuredDataModels, setExtractStructuredDataModels] = useState([]);
-  const [showImageDescriptionOptions, setShowImageDescriptionOptions] = useState(false);
-
+  
   useEffect(() => {
     fetchModels();
-  }, []);
+  }, []); // 仅在组件挂载时获取一次模型数据
 
   const fetchModels = async () => {
     try {
@@ -64,43 +63,80 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
           >
             <Select 
               placeholder="选择转换类型"
-              onChange={(value) => setShowImageDescriptionOptions(value === 'advanced')}
+              onChange={(value) => {
+                // 如果切换到简单模式，自动禁用图片描述
+                if (value !== 'advanced' && form) {
+                  form.setFieldsValue({ enable_image_description: false });
+                }
+              }}
             >
               <Select.Option value="simple">简单模式（默认）</Select.Option>
               <Select.Option value="advanced">高级模式（支持OCR和图片描述）</Select.Option>
             </Select>
           </Form.Item>
           
-          {showImageDescriptionOptions && (
-            <>
-              <Form.Item
-                name="enable_image_description"
-                label="启用图片描述"
-                valuePropName="checked"
-                help="启用后会使用AI生成图片描述"
-              >
-                <Switch />
-              </Form.Item>
+          <Form.Item
+            shouldUpdate={(prevValues, currentValues) => 
+              prevValues.markdown_conversion_type !== currentValues.markdown_conversion_type
+            }
+          >
+            {({ getFieldValue }) => {
+              const conversionType = getFieldValue('markdown_conversion_type');
+              const showImageDescriptionOptions = conversionType === 'advanced';
               
-              <Form.Item
-                name="image_description_model"
-                label="图片描述模型"
-                help="选择用于生成图片描述的模型"
-                dependencies={['enable_image_description']}
-              >
-                <Select 
-                  placeholder="选择模型"
-                  disabled={!form.getFieldValue('enable_image_description')}
-                >
-                  {imageDescriptionModels.map(model => (
-                    <Select.Option key={model.id} value={model.id}>
-                      {model.name} - {model.description}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </>
-          )}
+              return showImageDescriptionOptions ? (
+                <>
+                  <Form.Item
+                    name="enable_image_description"
+                    label="启用图片描述"
+                    valuePropName="checked"
+                    help="启用后会使用AI生成图片描述"
+                  >
+                    <Switch onChange={(checked) => {
+                      // 如果禁用了图片描述，清空模型选择
+                      if (!checked && form) {
+                        form.setFieldsValue({ image_description_model: '' });
+                      }
+                    }} />
+                  </Form.Item>
+                  
+                  <Form.Item
+                    shouldUpdate={(prevValues, currentValues) => 
+                      prevValues.enable_image_description !== currentValues.enable_image_description
+                    }
+                  >
+                    {({ getFieldValue }) => {
+                      const isEnabled = getFieldValue('enable_image_description');
+                      return (
+                        <Form.Item
+                          name="image_description_model"
+                          label="图片描述模型"
+                          help="选择用于生成图片描述的模型"
+                          rules={[
+                            { 
+                              required: isEnabled, 
+                              message: '启用图片描述时，请选择模型' 
+                            }
+                          ]}
+                        >
+                          <Select 
+                            placeholder="选择模型"
+                            disabled={!isEnabled}
+                          >
+                            {imageDescriptionModels.map(model => (
+                              <Select.Option key={model.id} value={model.id}>
+                                {model.name} - {model.description}
+                              </Select.Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      );
+                    }}
+                  </Form.Item>
+                </>
+              ) : null;
+            }}
+          </Form.Item>
         </>
       )
     },
@@ -115,7 +151,7 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
             rules={[{ required: true, message: '请输入提示词' }]}
             help="设定AI审阅时的主要提示词，将被项目继承"
           >
-            <Input.TextArea rows={6} />
+            <Input.TextArea rows={6} placeholder="请输入提示词" />
           </Form.Item>
 
           <Form.Item
@@ -139,7 +175,7 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
               style={{ flex: 1 }}
               help="控制输出的随机性，值越低越确定"
             >
-              <InputNumber min={0} max={1} step={0.1} />
+              <InputNumber min={0} max={1} step={0.1} defaultValue={0.7} />
             </Form.Item>
 
             <Form.Item
@@ -148,7 +184,7 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
               style={{ flex: 1 }}
               help="生成文本的最大长度"
             >
-              <InputNumber min={100} max={8000} step={100} />
+              <InputNumber min={100} max={8000} step={100} defaultValue={2000} />
             </Form.Item>
 
             <Form.Item
@@ -157,7 +193,7 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
               style={{ flex: 1 }}
               help="控制输出的多样性"
             >
-              <InputNumber min={0} max={1} step={0.05} />
+              <InputNumber min={0} max={1} step={0.05} defaultValue={0.95} />
             </Form.Item>
           </div>
         </>
@@ -189,7 +225,7 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
               style={{ flex: 1 }}
               help="控制输出的随机性，值越低越确定"
             >
-              <InputNumber min={0} max={1} step={0.1} />
+              <InputNumber min={0} max={1} step={0.1} defaultValue={0.7} />
             </Form.Item>
 
             <Form.Item
@@ -198,7 +234,7 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
               style={{ flex: 1 }}
               help="生成文本的最大长度"
             >
-              <InputNumber min={100} max={8000} step={100} />
+              <InputNumber min={100} max={8000} step={100} defaultValue={2000} />
             </Form.Item>
 
             <Form.Item
@@ -207,7 +243,7 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
               style={{ flex: 1 }}
               help="控制输出的多样性"
             >
-              <InputNumber min={0} max={1} step={0.05} />
+              <InputNumber min={0} max={1} step={0.05} defaultValue={0.95} />
             </Form.Item>
           </div>
 
@@ -216,7 +252,7 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
             label="提取提示词"
             help="用于指导结构化数据提取的提示词"
           >
-            <Input.TextArea rows={6} />
+            <Input.TextArea rows={6} placeholder="请输入提示词" />
           </Form.Item>
         </>
       )
@@ -225,9 +261,8 @@ const ArticleTypeConfigForm = ({ form, initialValues = {}, showBasicSettings = t
 
   return (
     <Collapse 
-      items={collapseItems} 
-      style={{ marginBottom: 16 }} 
-      defaultActiveKey={['basic_settings', 'markdown_conversion', 'process_llm', 'extract_structured_data']}
+      defaultActiveKey={['basic_settings', 'markdown_conversion', 'process_llm']} 
+      items={collapseItems}
     />
   );
 };

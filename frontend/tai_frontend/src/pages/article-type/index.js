@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, message, Popconfirm } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
-import ArticleTypeConfigForm from '../../components/ArticleTypeConfigForm';
+import ArticleTypeConfigForm from './components/ArticleTypeConfigForm';
 
 const ArticleType = () => {
   const [data, setData] = useState([]);
@@ -195,7 +195,9 @@ const ArticleType = () => {
             extract_structured_data_top_p: 0.8,
           }}
         >
-          <ArticleTypeConfigForm form={form} />
+          <ArticleTypeConfigForm 
+            form={form} 
+          />
         </Form>
       </Modal>
     </div>
