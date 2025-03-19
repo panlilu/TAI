@@ -513,6 +513,8 @@ def convert_to_markdown_task(task_id: int, article_id: int):
                 task.logs += "【信息】更新现有的AI审阅报告...\n"
                 
             ai_review.processed_attachment_text = markdown_text
+            # 更新AI审阅报告状态为已完成
+            ai_review.status = "completed"
             
             # 更新文章的active_ai_review_report_id
             article.active_ai_review_report_id = ai_review.id
@@ -722,6 +724,8 @@ def process_with_llm_task(task_id: int, article_id: int):
             # 更新AI审阅报告内容
             ai_review.review_content = ai_review_content
             ai_review.source_data = ai_review_content
+            # 更新AI审阅报告状态为已完成
+            ai_review.status = "completed"
             
             # 更新文章的active_ai_review_report_id
             article.active_ai_review_report_id = ai_review.id
