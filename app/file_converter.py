@@ -297,7 +297,7 @@ class AdvancedMarkdownConverter:
             raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
         
         # 创建输出目录
-        output_dir = f"ocr_results_{pdf_file.stem}"
+        output_dir = os.path.join(os.path.dirname(pdf_path), "ocr_results")
         
         # 上传并处理PDF
         uploaded_file = client.files.upload(

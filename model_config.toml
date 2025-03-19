@@ -56,7 +56,7 @@ available_models = [
     "deepseek/deepseek-reason",
     "openrouter/qwen/qwq-32b:free"
 ]
-default_model = "deepseek/deepseek-chat"
+default_model = "openrouter/qwen/qwq-32b:free"
 description = "使用LLM处理文本内容的任务"
 
 [tasks.process_with_llm.default_config]
@@ -69,7 +69,7 @@ available_models = [
     "deepseek/deepseek-reason",
     "openrouter/qwen/qwq-32b:free"
 ]
-default_model = "deepseek/deepseek-reason"
+default_model = "openrouter/qwen/qwq-32b:free"
 description = "AI审阅和分析文档的任务"
 
 [tasks.ai_review.default_config]
@@ -95,7 +95,7 @@ available_models = [
     "deepseek/deepseek-reason",
     "openrouter/qwen/qwq-32b:free"
 ]
-default_model = "deepseek/deepseek-reason"
+default_model = "openrouter/qwen/qwq-32b:free"
 description = "从文本中提取结构化数据的任务"
 
 [tasks.extract_structured_data.default_config]

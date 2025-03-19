@@ -20,6 +20,7 @@ const ArticleViewer = () => {
   const [structuredData, setStructuredData] = useState(null);
   const [isStructuredDataProcessing, setIsStructuredDataProcessing] = useState(false);
   const [selectedAction, setSelectedAction] = useState('AI审阅');
+  const [structuredDataNotFound, setStructuredDataNotFound] = useState(false);
 
   const connectToAIReviewEvents = (aiReviewId) => {
     setIsAiProcessing(true);
@@ -136,16 +137,18 @@ const ArticleViewer = () => {
         
         // 获取结构化数据
         try {
-          const structuredDataResponse = await request(`/structured-data?article_id=${articleId}`);
-          if (structuredDataResponse) {
-            setStructuredData(structuredDataResponse);
+          if (!structuredDataNotFound) {
+            const structuredDataResponse = await request(`/structured-data?article_id=${articleId}`);
+            if (structuredDataResponse) {
+              setStructuredData(structuredDataResponse);
+            }
           }
         } catch (error) {
-          // 如果是404错误（暂无数据），不显示错误信息
-          if (error.response?.status !== 404) {
-            console.error('获取结构化数据失败', error);
-          } else {
+          if (error.response?.status === 404) {
             console.log('暂无结构化数据');
+            setStructuredDataNotFound(true);
+          } else {
+            console.error('获取结构化数据失败', error);
           }
         }
       } catch (error) {
@@ -163,7 +166,7 @@ const ArticleViewer = () => {
       eventService.disconnectAIReview();
       eventService.disconnectStructuredData();
     };
-  }, [articleId, pdfUrl]);
+  }, [articleId]);
 
   const handleConvertToMarkdown = async () => {
     try {
@@ -216,6 +219,7 @@ const ArticleViewer = () => {
   const handleExtractStructuredData = async () => {
     try {
       setIsStructuredDataProcessing(true);
+      setStructuredDataNotFound(false);
       await request.post(`/articles/${articleId}/extract-structured-data`);
       message.success('已创建结构化数据提取任务，请稍后在结构化数据标签页查看进度');
       

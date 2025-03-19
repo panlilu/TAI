@@ -1321,65 +1321,101 @@ async def ai_review_events(
     db: Session = Depends(get_db)
 ):
     # 检查 AI 审阅报告是否存在并且属于当前用户的项目
-    ai_review = db.query(models.AIReviewReport).join(
-        models.Article
-    ).join(
-        models.Project
-    ).filter(
-        models.AIReviewReport.id == ai_review_id,
-        models.Project.owner_id == current_user.id
-    ).first()
-    
+    ai_review = db.query(models.AIReviewReport).filter(models.AIReviewReport.id == ai_review_id).first()
     if not ai_review:
-        raise HTTPException(
-            status_code=404,
-            detail="AI review not found or not authorized"
-        )
-
-    last_source_data = ai_review.source_data
-    last_check_time = datetime.utcnow()
+        raise HTTPException(status_code=404, detail="AI review report not found")
+    
+    article = db.query(models.Article).filter(models.Article.id == ai_review.article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    project = db.query(models.Project).filter(models.Project.id == article.project_id).first()
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this AI review report")
 
     async def event_generator():
-        nonlocal last_source_data, last_check_time
-        heartbeat_interval = 30  # 30秒发送一次心跳
-        last_heartbeat = 0
+        try:
+            while True:
+                # 重新查询数据库以获取最新数据
+                db_review = db.query(models.AIReviewReport).filter(models.AIReviewReport.id == ai_review_id).first()
+                
+                if not db_review:
+                    # 如果审阅报告被删除
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'AI review report not found'})}\n\n"
+                    break
+                
+                # 发送当前审阅状态
+                yield f"data: {json.dumps({'type': 'status', 'status': db_review.status})}\n\n"
+                
+                # 如果已完成，发送完成通知
+                if db_review.status == "completed":
+                    yield f"data: {json.dumps({'type': 'content', 'content': db_review.source_data or '', 'is_final': True})}\n\n"
+                    break
+                
+                await asyncio.sleep(2)
+        except asyncio.CancelledError:
+            logger.info(f"Client disconnected from AI review events stream for review ID {ai_review_id}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in AI review events stream: {str(e)}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            raise
 
-        while True:
-            current_time = datetime.utcnow()
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-            # 发送心跳
-            if (current_time.timestamp() - last_heartbeat) >= heartbeat_interval:
-                yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
-                last_heartbeat = current_time.timestamp()
-
-            # 刷新数据库会话并重新查询 AI 审阅报告
-            db.expire_all()
-            current_ai_review = db.query(models.AIReviewReport).filter(
-                models.AIReviewReport.id == ai_review_id
-            ).first()
-
-            if current_ai_review and current_ai_review.updated_at > last_check_time:
-                # 如果source_data发生变化，计算新增的内容
-                if current_ai_review.source_data != last_source_data:
-                    # 找出新增的内容
-                    new_content = current_ai_review.source_data[len(last_source_data):] if last_source_data else current_ai_review.source_data
-                    if new_content:
-                        data = {
-                            "type": "content",
-                            "content": new_content,
-                            "is_final": current_ai_review.status == "completed"
-                        }
-                        yield f"data: {json.dumps(data)}\n\n"
-                    last_source_data = current_ai_review.source_data
-
-                last_check_time = current_time
-
-            await asyncio.sleep(0.5)  # 每0.5秒检查一次更新
+@api_app.get("/events_structured_data/{report_id}")
+async def structured_data_events(
+    report_id: int,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 检查 AI 审阅报告是否存在并且属于当前用户的项目
+    ai_review = db.query(models.AIReviewReport).filter(models.AIReviewReport.id == report_id).first()
+    if not ai_review:
+        raise HTTPException(status_code=404, detail="AI review report not found")
     
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream"
-    )
+    article = db.query(models.Article).filter(models.Article.id == ai_review.article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    project = db.query(models.Project).filter(models.Project.id == article.project_id).first()
+    if not project or project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this AI review report")
+
+    async def event_generator():
+        try:
+            while True:
+                # 重新查询数据库以获取最新数据
+                db_review = db.query(models.AIReviewReport).filter(models.AIReviewReport.id == report_id).first()
+                
+                if not db_review:
+                    # 如果审阅报告被删除
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'AI review report not found'})}\n\n"
+                    break
+                
+                # 发送当前审阅状态
+                yield f"data: {json.dumps({'type': 'status', 'status': db_review.status})}\n\n"
+                
+                # 如果结构化数据已生成，发送数据
+                if db_review.structured_data:
+                    yield f"data: {json.dumps({'type': 'content', 'content': json.dumps(db_review.structured_data), 'is_final': True})}\n\n"
+                    break
+                
+                # 如果处理完成但没有结构化数据
+                if db_review.status == "completed" and not db_review.structured_data:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'No structured data available', 'is_final': True})}\n\n"
+                    break
+                
+                await asyncio.sleep(2)
+        except asyncio.CancelledError:
+            logger.info(f"Client disconnected from structured data events stream for review ID {report_id}")
+            raise
+        except Exception as e:
+            logger.error(f"Error in structured data events stream: {str(e)}")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            raise
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # 添加模型配置相关的API端点
 @api_app.get("/models", tags=["Model Configuration"])

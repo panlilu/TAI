@@ -46,7 +46,7 @@ def seed_database():
         # 创建管理员用户
         admin_user = User(
             username="pan",
-            hashed_password=pwd_context.hash("password123"),
+            hashed_password=pwd_context.hash("password3333"),
             role=UserRole.ADMIN,
             is_active=True
         )
@@ -83,7 +83,7 @@ def seed_database():
                         "top_p": 0.9
                     },
                     "extract_structured_data": {
-                        "model": "deepseek/deepseek-reason",
+                        "model": "openrouter/qwen/qwq-32b:free",
                         "temperature": 0.2,
                         "max_tokens": 3000,
                         "top_p": 0.8,
