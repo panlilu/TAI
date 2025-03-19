@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Table, Button, Input, Form, Upload, message, Tabs, Space, Descriptions, Tag, Select, Switch } from 'antd';
-import { UploadOutlined, EyeOutlined, DeleteOutlined, SettingOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Input, Form, Upload, message, Tabs, Space, Select, Switch } from 'antd';
+import { UploadOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
 import config from '../../config';
 
-const { TextArea } = Input;
+// const { TextArea } = Input;
 
 const ProjectDetail = () => {
   const { id } = useParams();
@@ -13,7 +13,6 @@ const ProjectDetail = () => {
   const [project, setProject] = useState(null);
   const [articles, setArticles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [articleType, setArticleType] = useState(null);
   const [form] = Form.useForm();
   const [settingsForm] = Form.useForm();  // 为项目设置添加单独的 form 实例
 
@@ -203,9 +202,6 @@ const ProjectDetail = () => {
             label={
               <span>
                 提示词
-                {articleType?.config?.prompt && (
-                  <Tag color="blue" style={{ marginLeft: 8 }}>可继承</Tag>
-                )}
               </span>
             }
             help="如果不设置，将使用文章类型中的提示词"
@@ -218,9 +214,6 @@ const ProjectDetail = () => {
             label={
               <span>
                 格式化提示词
-                {articleType?.config?.format_prompt && (
-                  <Tag color="blue" style={{ marginLeft: 8 }}>可继承</Tag>
-                )}
               </span>
             }
             help="如果不设置，将使用文章类型中的格式化提示词"
@@ -253,21 +246,6 @@ const ProjectDetail = () => {
           >
             <Switch />
           </Form.Item>
-
-          {articleType && (
-            <div style={{ marginBottom: 16 }}>
-              <h3>文章类型: {articleType.name}</h3>
-              {articleType.config && (
-                <Descriptions bordered column={1} size="small" style={{ marginTop: 8 }}>
-                  {articleType.config?.min_words > 0 || articleType.config?.max_words > 0 ? (
-                    <Descriptions.Item label="字数限制">
-                      {articleType.config?.min_words || 0} - {articleType.config?.max_words || '∞'}
-                    </Descriptions.Item>
-                  ) : null}
-                </Descriptions>
-              )}
-            </div>
-          )}
 
           <Form.Item>
             <Button type="primary" htmlType="submit">

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Table, Button, message, Space, Progress, Collapse, Tag, InputNumber, Tooltip, Modal } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Table, Button, message, Space, Progress, Tag, InputNumber, Tooltip, Modal } from 'antd';
 import { 
   ReloadOutlined, 
   PauseCircleOutlined, 
@@ -12,8 +12,6 @@ import {
 } from '@ant-design/icons';
 import request from '../../utils/request';
 import { eventService } from '../../utils/eventService';
-
-const { Panel } = Collapse;
 
 const Jobs = () => {
   const [data, setData] = useState([]);
@@ -36,7 +34,7 @@ const Jobs = () => {
   };
 
   // 处理任务状态更新
-  const handleJobUpdate = (eventData) => {
+  const handleJobUpdate = useCallback((eventData) => {
     setData(prevData => {
       const updatedData = [...prevData];
       const jobIndex = updatedData.findIndex(job => job.id === eventData.id);
@@ -52,10 +50,10 @@ const Jobs = () => {
       
       return updatedData;
     });
-  };
+  }, []);
 
   // 处理子任务更新，包括日志更新
-  const handleTaskUpdate = (eventData) => {
+  const handleTaskUpdate = useCallback((eventData) => {
     setData(prevData => {
       const updatedData = [...prevData];
       const jobIndex = updatedData.findIndex(job => job.id === eventData.job_id);
@@ -88,7 +86,7 @@ const Jobs = () => {
       
       return updatedData;
     });
-  };
+  }, [currentTaskId]);
 
   useEffect(() => {
     fetchData();
@@ -106,7 +104,7 @@ const Jobs = () => {
       eventService.removeEventListener('job_update', handleJobUpdate);
       eventService.removeEventListener('task_update', handleTaskUpdate);
     };
-  }, [currentTaskId]);
+  }, [handleJobUpdate, handleTaskUpdate]);
 
   const handleRetry = async (id, taskId = null) => {
     try {

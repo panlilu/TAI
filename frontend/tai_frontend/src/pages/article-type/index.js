@@ -9,7 +9,6 @@ const ArticleType = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [form] = Form.useForm();
   const [editingId, setEditingId] = useState(null);
-  const [availableModels, setAvailableModels] = useState([]);
   const [aiReviewModels, setAiReviewModels] = useState([]);
   const [processWithLlmModels, setProcessWithLlmModels] = useState([]);
   const [imageDescriptionModels, setImageDescriptionModels] = useState([]);
@@ -29,9 +28,8 @@ const ArticleType = () => {
   const fetchModels = async () => {
     try {
       // 获取所有可用模型
-      const allModels = await request.get('/models');
-      setAvailableModels(allModels);
-
+      // const allModels = await request.get('/models');
+      
       // 获取AI审阅任务可用的模型
       const aiReviewModelsData = await request.get('/tasks/ai_review/models');
       setAiReviewModels(aiReviewModelsData);

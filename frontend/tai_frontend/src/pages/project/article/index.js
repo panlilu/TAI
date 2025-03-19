@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Card, message, Button, Tabs, Space, Dropdown, Menu } from 'antd';
+import { Card, message, Button, Tabs, Space, Dropdown } from 'antd';
 import { FullscreenOutlined, FullscreenExitOutlined, DownOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import 'github-markdown-css';
@@ -121,6 +121,9 @@ const ArticleViewer = () => {
           }
           
           setAiReview(activeReview);
+          // 根据AI审阅状态设置isAiProcessing标志
+          setIsAiProcessing(activeReview.status !== 'completed');
+          
           if (activeReview.processed_attachment_text) {
             setMarkdownContent(activeReview.processed_attachment_text);
           }
@@ -160,11 +163,11 @@ const ArticleViewer = () => {
       eventService.disconnectAIReview();
       eventService.disconnectStructuredData();
     };
-  }, [articleId]);
+  }, [articleId, pdfUrl]);
 
   const handleConvertToMarkdown = async () => {
     try {
-      const response = await request.post(`/jobs`, {
+      await request.post(`/jobs`, {
         project_id: parseInt(projectId),
         name: `转换文章 #${articleId} 为Markdown`,
         tasks: [
@@ -183,7 +186,7 @@ const ArticleViewer = () => {
   const handleAIProcess = async () => {
     try {
       setIsAiProcessing(true);
-      const response = await request.post('/jobs', {
+      await request.post('/jobs', {
         project_id: parseInt(projectId),
         name: `AI审阅文章 #${articleId}`,
         tasks: [
@@ -200,6 +203,8 @@ const ArticleViewer = () => {
       if (aiReviewResponse && aiReviewResponse.length > 0) {
         const latestReview = aiReviewResponse[0];
         setAiReview(latestReview);
+        // 确保根据最新状态设置isAiProcessing
+        setIsAiProcessing(latestReview.status !== 'completed');
         connectToAIReviewEvents(latestReview.id);
       }
     } catch (error) {
@@ -211,7 +216,7 @@ const ArticleViewer = () => {
   const handleExtractStructuredData = async () => {
     try {
       setIsStructuredDataProcessing(true);
-      const response = await request.post(`/articles/${articleId}/extract-structured-data`);
+      await request.post(`/articles/${articleId}/extract-structured-data`);
       message.success('已创建结构化数据提取任务，请稍后在结构化数据标签页查看进度');
       
       // 如果有活跃的AI审阅报告，连接到结构化数据事件流
@@ -302,14 +307,6 @@ const ArticleViewer = () => {
     return <div>加载中...</div>;
   }
   
-  const menu = (
-    <Menu onClick={handleActionSelect} selectedKeys={[selectedAction]}>
-      <Menu.Item key="转换为Markdown">转换为Markdown</Menu.Item>
-      <Menu.Item key="AI审阅">AI审阅</Menu.Item>
-      <Menu.Item key="提取结构化数据">提取结构化数据</Menu.Item>
-    </Menu>
-  );
-
   const items = [
     {
       key: '1',
@@ -418,7 +415,11 @@ const ArticleViewer = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{article.name}</span>
             <Space>
-              <Dropdown menu={menu} trigger={['click']}>
+              <Dropdown menu={{ items: [
+                { key: '转换为Markdown', label: '转换为Markdown' },
+                { key: 'AI审阅', label: 'AI审阅' },
+                { key: '提取结构化数据', label: '提取结构化数据' }
+              ], onClick: handleActionSelect, selectedKeys: [selectedAction] }} trigger={['click']}>
                 <Button>
                   {selectedAction} <DownOutlined />
                 </Button>
