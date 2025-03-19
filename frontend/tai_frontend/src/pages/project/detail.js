@@ -156,19 +156,26 @@ const ProjectDetail = () => {
   // 更新项目设置
   const handleUpdateSettings = async (values) => {
     try {
-      await request(`/projects/${id}`, {
-        method: 'PUT',
-        data: {
-          name: values.name,
-          config: {
-            prompt: values.prompt,
-            format_prompt: values.format_prompt,
-            review_criteria: values.review_criteria,
-            language: values.language || 'zh',
-          },
-          auto_approve: values.auto_approve
-        }
-      });
+      const formData = {
+        name: values.name,
+        config: {
+          prompt: values.prompt,
+          format_prompt: values.format_prompt,
+          review_criteria: values.review_criteria,
+          language: values.language || 'zh',
+          tasks: {
+            process_with_llm: {
+              model: values.process_model || '',
+              temperature: values.process_temperature || 0.7,
+              max_tokens: values.process_max_tokens || 2000,
+              top_p: values.process_top_p || 0.95,
+            }
+          }
+        },
+        auto_approve: values.auto_approve
+      };
+
+      await request.put(`/projects/${id}`, formData);
       message.success('更新成功');
       fetchProject();
     } catch (error) {

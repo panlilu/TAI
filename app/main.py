@@ -355,13 +355,6 @@ async def create_article_review(
     )
     db.add(llm_task)
     
-    ai_review_task = models.JobTask(
-        job_id=db_job.id,
-        task_type=schemas.JobTaskType.PROCESS_AI_REVIEW,
-        status=schemas.JobStatus.PENDING,
-        article_id=article_id
-    )
-    db.add(ai_review_task)
     db.commit()
     
     # 启动任务

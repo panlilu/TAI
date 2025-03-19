@@ -9,7 +9,6 @@ const ArticleType = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [form] = Form.useForm();
   const [editingId, setEditingId] = useState(null);
-  const [aiReviewModels, setAiReviewModels] = useState([]);
   const [processWithLlmModels, setProcessWithLlmModels] = useState([]);
   const [imageDescriptionModels, setImageDescriptionModels] = useState([]);
   const [extractStructuredDataModels, setExtractStructuredDataModels] = useState([]);
@@ -28,13 +27,6 @@ const ArticleType = () => {
 
   const fetchModels = async () => {
     try {
-      // 获取所有可用模型
-      // const allModels = await request.get('/models');
-      
-      // 获取AI审阅任务可用的模型
-      const aiReviewModelsData = await request.get('/tasks/ai_review/models');
-      setAiReviewModels(aiReviewModelsData);
-
       // 获取LLM处理任务可用的模型
       const processModelsData = await request.get('/tasks/process_with_llm/models');
       setProcessWithLlmModels(processModelsData);
@@ -77,10 +69,6 @@ const ArticleType = () => {
       enable_image_description: record.config?.tasks?.convert_to_markdown?.enable_image_description !== false, // 默认为true
       image_description_model: record.config?.tasks?.convert_to_markdown?.image_description_model || 'lm_studio/qwen2.5-vl-7b-instruct',
       // LLM配置
-      ai_review_model: record.config?.tasks?.ai_review?.model || '',
-      ai_review_temperature: record.config?.tasks?.ai_review?.temperature || 0.3,
-      ai_review_max_tokens: record.config?.tasks?.ai_review?.max_tokens || 4000,
-      ai_review_top_p: record.config?.tasks?.ai_review?.top_p || 0.9,
       process_model: record.config?.tasks?.process_with_llm?.model || '',
       process_temperature: record.config?.tasks?.process_with_llm?.temperature || 0.7,
       process_max_tokens: record.config?.tasks?.process_with_llm?.max_tokens || 2000,
@@ -125,12 +113,6 @@ const ArticleType = () => {
               conversion_type: values.markdown_conversion_type || 'simple',
               enable_image_description: values.enable_image_description,
               image_description_model: values.image_description_model || 'lm_studio/qwen2.5-vl-7b-instruct',
-            },
-            ai_review: {
-              model: values.ai_review_model || '',
-              temperature: values.ai_review_temperature || 0.3,
-              max_tokens: values.ai_review_max_tokens || 4000,
-              top_p: values.ai_review_top_p || 0.9,
             },
             process_with_llm: {
               model: values.process_model || '',
@@ -256,56 +238,6 @@ const ArticleType = () => {
               </Form.Item>
             </>
           )}
-        </>
-      )
-    },
-    {
-      key: 'ai_review',
-      label: 'AI审阅模型配置',
-      children: (
-        <>
-          <Form.Item
-            name="ai_review_model"
-            label="AI审阅模型"
-            help="选择用于AI审阅任务的模型"
-          >
-            <Select placeholder="选择模型">
-              {aiReviewModels.map(model => (
-                <Select.Option key={model.id} value={model.id}>
-                  {model.name} - {model.description}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <Form.Item
-              name="ai_review_temperature"
-              label="温度"
-              style={{ flex: 1 }}
-              help="控制输出的随机性，值越低越确定"
-            >
-              <InputNumber min={0} max={1} step={0.1} />
-            </Form.Item>
-
-            <Form.Item
-              name="ai_review_max_tokens"
-              label="最大Token数"
-              style={{ flex: 1 }}
-              help="生成文本的最大长度"
-            >
-              <InputNumber min={100} max={8000} step={100} />
-            </Form.Item>
-
-            <Form.Item
-              name="ai_review_top_p"
-              label="Top P"
-              style={{ flex: 1 }}
-              help="控制输出的多样性"
-            >
-              <InputNumber min={0} max={1} step={0.05} />
-            </Form.Item>
-          </div>
         </>
       )
     },
@@ -454,9 +386,6 @@ const ArticleType = () => {
             is_public: false,
             language: 'zh',
             markdown_conversion_type: 'simple',
-            ai_review_temperature: 0.3,
-            ai_review_max_tokens: 4000,
-            ai_review_top_p: 0.9,
             process_temperature: 0.7,
             process_max_tokens: 2000,
             process_top_p: 0.95,

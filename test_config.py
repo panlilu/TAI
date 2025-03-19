@@ -42,15 +42,6 @@ available_models = [
 default_model = "deepseek/deepseek-reason"
 description = "AI审阅和分析文档的任务"
 default_config = { temperature = 0.3, max_tokens = 4000, top_p = 0.9 }
-
-[tasks.text_summarization]
-available_models = [
-    "deepseek/deepseek-chat",
-    "openrouter/qwen/qwq-32b-free"
-]
-default_model = "deepseek/deepseek-chat"
-description = "文本摘要生成任务"
-default_config = { temperature = 0.5, max_tokens = 1000, top_p = 0.9 }
 """
 
 # 写入新的配置文件
