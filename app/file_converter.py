@@ -285,7 +285,7 @@ class AdvancedMarkdownConverter:
                 desc_content = f.read()
             
             # 合并内容
-            final_content = f"{complete_content}\n\n{desc_content}"
+            final_content = f"{complete_content}\n\n#以下图片描述信息为系统生成\n{desc_content}"
         
         # 保存最终文件
         with open(result_md_path, 'w', encoding='utf-8') as f:

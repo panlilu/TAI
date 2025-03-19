@@ -532,37 +532,10 @@ def process_with_llm_task(task_id: int, article_id: int):
         if not task:
             raise Exception("Task not found")
             
-        # 检查是否有相同job_id的Markdown转换任务已完成
-        markdown_task = db.query(JobTask).filter(
-            JobTask.job_id == task.job_id,
-            JobTask.task_type == JobTaskType.CONVERT_TO_MARKDOWN,
-            JobTask.article_id == article_id
-        ).first()
-        
-        if not markdown_task:
-            error_msg = "错误：找不到对应的Markdown转换任务"
-            print(f"Task {task_id} error: {error_msg}")
-            task.logs = f"【错误】{error_msg}\n"
-            task.status = JobStatus.FAILED
-            db.commit()
-            return
-            
-        if markdown_task.status != JobStatus.COMPLETED:
-            # 如果Markdown任务未完成，将当前任务重新设为等待状态，延迟执行
-            if task.status != JobStatus.PENDING:
-                task.status = JobStatus.PENDING
-                task.logs = f"【等待】等待Markdown转换任务完成，当前状态: {markdown_task.status}\n"
-                db.commit()
-            print(f"Task {task_id} waiting for markdown task {markdown_task.id} to complete")
-            return
-            
         # 更新任务状态
         task.status = JobStatus.PROCESSING
         task.progress = 0
         task.logs = "【开始】开始处理文档内容生成AI审阅报告...\n"
-        db.commit()
-        
-        task.logs += f"【信息】Markdown转换任务 {markdown_task.id} 已完成，继续处理\n"
         db.commit()
 
         # 获取文章信息
@@ -589,22 +562,52 @@ def process_with_llm_task(task_id: int, article_id: int):
 
         # 获取AI审阅报告
         ai_review = db.query(AIReviewReport).filter(
-            AIReviewReport.article_id == article_id
+            AIReviewReport.article_id == article_id,
+            AIReviewReport.job_id == task.job_id
         ).first()
         
         if not ai_review:
-            error_msg = "错误：找不到AI审阅报告"
-            task.logs += f"【错误】{error_msg}\n"
-            db.commit()
-            raise Exception(error_msg)
+            # 如果没有找到该job_id的AI审阅报告，尝试找到任何活跃的审阅报告
+            if article.active_ai_review_report_id:
+                ai_review = db.query(AIReviewReport).filter(
+                    AIReviewReport.id == article.active_ai_review_report_id
+                ).first()
+                if ai_review:
+                    task.logs += f"【信息】使用文章活跃的AI审阅报告，ID: {ai_review.id}\n"
+            
+            # 如果仍未找到，尝试创建一个新的
+            if not ai_review:
+                task.logs += "【信息】创建新的AI审阅报告...\n"
+                ai_review = AIReviewReport(
+                    article_id=article_id,
+                    job_id=task.job_id
+                )
+                db.add(ai_review)
+                db.commit()
+                db.refresh(ai_review)
+        else:
+            task.logs += f"【信息】使用当前job关联的AI审阅报告，ID: {ai_review.id}\n"
+        db.commit()
             
         # 检查是否已经有Markdown格式的文本
         if not ai_review.processed_attachment_text:
-            error_msg = "错误：AI审阅报告中缺少处理后的文档内容"
-            task.logs += f"【错误】{error_msg}\n"
-            db.commit()
-            raise Exception(error_msg)
+            # 检查是否有相同job_id的Markdown转换任务已完成
+            markdown_task = db.query(JobTask).filter(
+                JobTask.job_id == task.job_id,
+                JobTask.task_type == JobTaskType.CONVERT_TO_MARKDOWN,
+                JobTask.article_id == article_id,
+                JobTask.status == JobStatus.COMPLETED
+            ).first()
             
+            if markdown_task:
+                task.logs += f"【信息】找到已完成的Markdown转换任务 {markdown_task.id}\n"
+            else:
+                error_msg = "错误：AI审阅报告中缺少处理后的文档内容，且找不到已完成的Markdown转换任务"
+                task.logs += f"【错误】{error_msg}\n"
+                task.status = JobStatus.FAILED
+                db.commit()
+                return
+        
         markdown_text = ai_review.processed_attachment_text
         
         task.logs += f"【信息】获取到Markdown格式内容，字符长度: {len(markdown_text)}\n"
