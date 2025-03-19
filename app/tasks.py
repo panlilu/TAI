@@ -437,9 +437,30 @@ def convert_to_markdown_task(task_id: int, article_id: int):
                 if conversion_type == 'advanced':
                     task_config['enable_image_description'] = enable_image_description
                     task_config['image_description_model'] = image_description_model
+                    # 添加日志记录函数
+                    def log_function(msg):
+                        task.logs += f"【详细】{msg}\n"
+                        db.commit()
+                        return True
+                    
+                    task_config['logger'] = log_function
+            
+            # 调用高级转换markdown的时候，同样需要有详细的task log
+            if conversion_type == 'advanced':
+                task.logs += "【详细】开始使用高级转换模式...\n"
+                task.logs += "【详细】上传PDF文件到Mistral OCR服务...\n"
+                db.commit()
             
             # 调用转换函数
             markdown_text = convert_file_to_markdown(file_path, conversion_type, task_config)
+            
+            # 如果是高级转换模式，添加更多详细日志
+            if conversion_type == 'advanced' and file_ext.lower() == '.pdf':
+                task.logs += "【详细】PDF文件OCR处理完成\n"
+                if task_config.get('enable_image_description', True):
+                    task.logs += "【详细】正在生成图片描述...\n"
+                    task.logs += f"【详细】使用模型 {task_config.get('image_description_model', 'lm_studio/qwen2.5-vl-7b-instruct')} 进行图片描述\n"
+                db.commit()
             
             task.progress = 80
             task.logs += "【处理】文件转换完成，正在保存结果...\n"

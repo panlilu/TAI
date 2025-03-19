@@ -113,6 +113,8 @@ class AdvancedMarkdownConverter:
         self.api_key = os.environ.get("MISTRAL_API_KEY") or self.config.get("mistral_api_key")
         self.image_model = self.config.get("image_description_model", "lm_studio/qwen2.5-vl-7b-instruct")
         self.enable_image_description = self.config.get("enable_image_description", True)
+        # 添加日志记录功能
+        self.logger = self.config.get("logger", lambda msg: print(msg))
         
         if not MISTRAL_AVAILABLE:
             raise ImportError("高级转换需要安装mistralai包: pip install mistralai")
@@ -192,15 +194,19 @@ class AdvancedMarkdownConverter:
             return {}
         
         descriptions = {}
+        total_images = len(images)
+        self.logger(f"开始处理 {total_images} 张图片的描述")
         
-        for img_id, img_info in images.items():
+        for idx, (img_id, img_info) in enumerate(images.items(), 1):
             try:
+                self.logger(f"正在处理第 {idx}/{total_images} 张图片 (ID: {img_id})")
                 img_path = img_info["path"]
                 # 读取图片为base64
                 with open(img_path, "rb") as img_file:
                     base64_image = base64.b64encode(img_file.read()).decode("utf-8")
                 
                 # 使用LLM生成图片描述
+                self.logger(f"使用模型 {self.image_model} 生成图片描述")
                 response = completion(
                     model=self.image_model,
                     messages=[
@@ -215,10 +221,14 @@ class AdvancedMarkdownConverter:
                 # 获取描述文本
                 desc_text = response.choices[0].message.content
                 descriptions[img_id] = desc_text
+                self.logger(f"图片 {img_id} 描述生成完成")
                 
             except Exception as e:
-                descriptions[img_id] = f"无法生成描述：{str(e)}"
+                error_msg = f"无法生成描述：{str(e)}"
+                descriptions[img_id] = error_msg
+                self.logger(f"图片 {img_id} 描述生成失败: {error_msg}")
         
+        self.logger(f"所有 {total_images} 张图片描述处理完成")
         return descriptions
     
     def create_image_description_markdown(self, descriptions: Dict[str, str], output_dir: str) -> str:
@@ -289,6 +299,7 @@ class AdvancedMarkdownConverter:
             raise ValueError("需要提供Mistral API密钥")
         
         # 初始化客户端
+        self.logger("初始化Mistral客户端")
         client = Mistral(api_key=self.api_key)
         
         # 确认PDF文件存在
@@ -298,8 +309,10 @@ class AdvancedMarkdownConverter:
         
         # 创建输出目录
         output_dir = os.path.join(os.path.dirname(pdf_path), "ocr_results")
+        self.logger(f"创建输出目录: {output_dir}")
         
         # 上传并处理PDF
+        self.logger(f"开始上传PDF文件: {pdf_file.name}")
         uploaded_file = client.files.upload(
             file={
                 "file_name": pdf_file.stem,
@@ -309,7 +322,10 @@ class AdvancedMarkdownConverter:
         )
         
         # 获取签名URL并处理OCR
+        self.logger("获取签名URL并开始OCR处理")
         signed_url = client.files.get_signed_url(file_id=uploaded_file.id, expiry=1)
+        
+        self.logger("调用Mistral OCR API处理PDF")
         pdf_response = client.ocr.process(
             document=DocumentURLChunk(document_url=signed_url.url), 
             model="mistral-ocr-latest", 
@@ -317,18 +333,26 @@ class AdvancedMarkdownConverter:
         )
         
         # 保存OCR结果
+        self.logger("OCR处理完成，开始保存结果")
         complete_md_path, images = self.save_ocr_results(pdf_response, output_dir)
         
         # 如果启用了图片描述，则生成图片描述
         final_content = ""
         if self.enable_image_description and IMAGE_DESCRIPTION_AVAILABLE:
+            self.logger("开始生成图片描述")
             image_descriptions = self.generate_image_descriptions(images)
+            
+            self.logger("创建图片描述Markdown文件")
             desc_md_path = self.create_image_description_markdown(image_descriptions, output_dir)
+            
+            self.logger("合并OCR结果和图片描述")
             final_content = self.create_final_markdown(complete_md_path, desc_md_path, output_dir)
         else:
             # 如果未启用图片描述，直接返回OCR结果
+            self.logger("图片描述功能未启用，直接使用OCR结果")
             with open(complete_md_path, 'r', encoding='utf-8') as f:
                 final_content = f.read()
         
+        self.logger("高级PDF转换完成")
         return final_content
 
