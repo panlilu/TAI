@@ -67,7 +67,7 @@ const ReviewWizard = () => {
           const project = await getProject(projectId);
           form.setFieldsValue({
             projectName: project.name,
-            prompt: project.config?.prompt || '',
+            prompt: project.config?.tasks?.process_with_llm?.prompt || '',
           });
         } catch (error) {
           console.log(error);
@@ -172,7 +172,11 @@ const ReviewWizard = () => {
         await updateProject(projectId, {
           name: projectName,
           config: {
-            prompt: prompt
+            tasks: {
+              process_with_llm: {
+                prompt: prompt
+              }
+            }
           }
         });
       }

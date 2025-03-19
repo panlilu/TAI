@@ -9,20 +9,24 @@ const ProjectTable = ({ data, loading, onDelete }) => {
   const renderConfig = (config, articleTypeConfig) => {
     if (!config && !articleTypeConfig) return '-';
 
-    const mergedConfig = { ...articleTypeConfig, ...config };
+    const mergedConfig = { 
+      ...articleTypeConfig,
+      ...config,
+      tasks: {
+        ...(articleTypeConfig?.tasks || {}),
+        ...(config?.tasks || {})
+      }
+    };
+
+    const hasPrompt = mergedConfig.tasks?.process_with_llm?.prompt;
+    const isCustomPrompt = config?.tasks?.process_with_llm?.prompt;
+    
     return (
       <Space direction="vertical">
-        {mergedConfig.prompt && (
-          <Tooltip title={mergedConfig.prompt}>
+        {hasPrompt && (
+          <Tooltip title={mergedConfig.tasks.process_with_llm.prompt}>
             <Tag color="blue">
-              {config?.prompt ? '已修改提示词' : '继承提示词'}
-            </Tag>
-          </Tooltip>
-        )}
-        {mergedConfig.format_prompt && (
-          <Tooltip title={mergedConfig.format_prompt}>
-            <Tag color="green">
-              {config?.format_prompt ? '已修改格式化提示' : '继承格式化提示'}
+              {isCustomPrompt ? '已修改提示词' : '继承提示词'}
             </Tag>
           </Tooltip>
         )}

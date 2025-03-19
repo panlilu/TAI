@@ -58,22 +58,14 @@ const ArticleType = () => {
     form.setFieldsValue({
       name: record.name,
       is_public: record.is_public,
-      prompt: record.config?.prompt || '',
-      format_prompt: record.config?.format_prompt || '',
-      review_criteria: record.config?.review_criteria || [],
-      min_words: record.config?.min_words || 0,
-      max_words: record.config?.max_words || 0,
-      language: record.config?.language || 'zh',
-      // Markdown转换配置
+      process_prompt: record.config?.tasks?.process_with_llm?.prompt || '',
       markdown_conversion_type: record.config?.tasks?.convert_to_markdown?.conversion_type || 'simple',
-      enable_image_description: record.config?.tasks?.convert_to_markdown?.enable_image_description !== false, // 默认为true
+      enable_image_description: record.config?.tasks?.convert_to_markdown?.enable_image_description !== false,
       image_description_model: record.config?.tasks?.convert_to_markdown?.image_description_model || 'lm_studio/qwen2.5-vl-7b-instruct',
-      // LLM配置
       process_model: record.config?.tasks?.process_with_llm?.model || '',
       process_temperature: record.config?.tasks?.process_with_llm?.temperature || 0.7,
       process_max_tokens: record.config?.tasks?.process_with_llm?.max_tokens || 2000,
       process_top_p: record.config?.tasks?.process_with_llm?.top_p || 0.95,
-      // 结构化数据提取配置
       extract_structured_data_model: record.config?.tasks?.extract_structured_data?.model || '',
       extract_structured_data_temperature: record.config?.tasks?.extract_structured_data?.temperature || 0.2,
       extract_structured_data_max_tokens: record.config?.tasks?.extract_structured_data?.max_tokens || 3000,
@@ -102,12 +94,7 @@ const ArticleType = () => {
         name: values.name,
         is_public: values.is_public,
         config: {
-          prompt: values.prompt || '',
           format_prompt: values.format_prompt || '',
-          review_criteria: values.review_criteria || [],
-          min_words: values.min_words || 0,
-          max_words: values.max_words || 0,
-          language: values.language || 'zh',
           tasks: {
             convert_to_markdown: {
               conversion_type: values.markdown_conversion_type || 'simple',
@@ -119,6 +106,7 @@ const ArticleType = () => {
               temperature: values.process_temperature || 0.7,
               max_tokens: values.process_max_tokens || 2000,
               top_p: values.process_top_p || 0.95,
+              prompt: values.process_prompt || '',
             },
             extract_structured_data: {
               model: values.extract_structured_data_model || '',
@@ -190,6 +178,29 @@ const ArticleType = () => {
   // 定义Collapse的items配置
   const collapseItems = [
     {
+      key: 'basic_settings',
+      label: '基本设置',
+      children: (
+        <>
+          <Form.Item
+            name="name"
+            label="类型名称"
+            rules={[{ required: true, message: '请输入类型名称' }]}
+          >
+            <Input />
+          </Form.Item>
+
+          <Form.Item
+            name="is_public"
+            label="是否公开"
+            valuePropName="checked"
+          >
+            <Switch />
+          </Form.Item>
+        </>
+      )
+    },
+    {
       key: 'markdown_conversion',
       label: 'Markdown转换配置',
       children: (
@@ -243,9 +254,18 @@ const ArticleType = () => {
     },
     {
       key: 'process_llm',
-      label: '文本处理模型配置',
+      label: '大模型审阅配置',
       children: (
         <>
+          <Form.Item
+            name="process_prompt"
+            label="审阅提示词"
+            rules={[{ required: true, message: '请输入提示词' }]}
+            help="设定AI审阅时的主要提示词，将被项目继承"
+          >
+            <Input.TextArea rows={6} />
+          </Form.Item>
+
           <Form.Item
             name="process_model"
             label="文本处理模型"
@@ -384,7 +404,6 @@ const ArticleType = () => {
           layout="vertical"
           initialValues={{
             is_public: false,
-            language: 'zh',
             markdown_conversion_type: 'simple',
             process_temperature: 0.7,
             process_max_tokens: 2000,
@@ -394,77 +413,11 @@ const ArticleType = () => {
             extract_structured_data_top_p: 0.8,
           }}
         >
-          <Form.Item
-            name="name"
-            label="类型名称"
-            rules={[{ required: true, message: '请输入类型名称' }]}
-          >
-            <Input />
-          </Form.Item>
-
-          <Form.Item
-            name="prompt"
-            label="审阅提示词"
-            rules={[{ required: true, message: '请输入提示词' }]}
-            help="设定AI审阅时的主要提示词，将被项目继承"
-          >
-            <Input.TextArea rows={6} />
-          </Form.Item>
-
-          <Form.Item
-            name="format_prompt"
-            label="格式化提示词"
-            help="用于规范AI输出格式的提示词"
-          >
-            <Input.TextArea rows={4} />
-          </Form.Item>
-
-          <Form.Item
-            name="review_criteria"
-            label="评审标准"
-            help="设置具体的评审标准和要求"
-          >
-            <Input.TextArea rows={4} />
-          </Form.Item>
-
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <Form.Item
-              name="min_words"
-              label="最小字数"
-              style={{ flex: 1 }}
-            >
-              <Input type="number" min={0} />
-            </Form.Item>
-
-            <Form.Item
-              name="max_words"
-              label="最大字数"
-              style={{ flex: 1 }}
-            >
-              <Input type="number" min={0} />
-            </Form.Item>
-
-            <Form.Item
-              name="language"
-              label="语言"
-              style={{ flex: 1 }}
-            >
-              <Select>
-                <Select.Option value="zh">中文</Select.Option>
-                <Select.Option value="en">English</Select.Option>
-              </Select>
-            </Form.Item>
-          </div>
-
-          <Collapse items={collapseItems} style={{ marginBottom: 16 }} />
-
-          <Form.Item
-            name="is_public"
-            label="是否公开"
-            valuePropName="checked"
-          >
-            <Switch />
-          </Form.Item>
+          <Collapse 
+            items={collapseItems} 
+            style={{ marginBottom: 16 }} 
+            defaultActiveKey={['basic_settings', 'markdown_conversion', 'process_llm', 'extract_structured_data']}
+          />
         </Form>
       </Modal>
     </div>

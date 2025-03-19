@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Input, Button, message, Card, Select, Switch, InputNumber, Collapse, Descriptions, Tag } from 'antd';
+import { Form, Input, Button, message, Card, Select, Switch, InputNumber, Collapse, Descriptions, Tag, Alert, Title, Divider } from 'antd';
 import { useParams, useNavigate } from 'react-router-dom';
 import request from '../../utils/request';
 
@@ -44,6 +44,8 @@ const Settings = () => {
         process_temperature: projectData.config?.tasks?.process_with_llm?.temperature || 0.7,
         process_max_tokens: projectData.config?.tasks?.process_with_llm?.max_tokens || 2000,
         process_top_p: projectData.config?.tasks?.process_with_llm?.top_p || 0.95,
+        // 从process_with_llm中获取prompt
+        prompt: projectData.config?.tasks?.process_with_llm?.prompt || '',
       });
     } catch (error) {
       message.error('加载项目信息失败');
@@ -62,8 +64,6 @@ const Settings = () => {
       const formData = {
         name: values.name,
         config: {
-          prompt: values.prompt,
-          format_prompt: values.format_prompt,
           review_criteria: values.review_criteria,
           language: values.language || 'zh',
           tasks: {
@@ -72,6 +72,7 @@ const Settings = () => {
               temperature: values.process_temperature || 0.7,
               max_tokens: values.process_max_tokens || 2000,
               top_p: values.process_top_p || 0.95,
+              prompt: values.prompt || '',
             }
           }
         },
@@ -87,43 +88,28 @@ const Settings = () => {
   };
 
   const renderInheritedConfig = () => {
-    if (!articleType?.config) return null;
-
+    if (!articleType) return null;
+    
     return (
-      <Card title="继承的配置" style={{ marginBottom: 24 }}>
-        <Descriptions bordered column={1}>
-          {articleType.config.prompt && (
-            <Descriptions.Item label="提示词">
-              {articleType.config.prompt}
-            </Descriptions.Item>
-          )}
-          {articleType.config.format_prompt && (
-            <Descriptions.Item label="格式化提示词">
-              {articleType.config.format_prompt}
-            </Descriptions.Item>
-          )}
-          {articleType.config.review_criteria && (
-            <Descriptions.Item label="评审标准">
-              {articleType.config.review_criteria}
-            </Descriptions.Item>
-          )}
-          {(articleType.config.min_words > 0 || articleType.config.max_words > 0) && (
-            <Descriptions.Item label="字数限制">
-              {articleType.config.min_words || 0} - {articleType.config.max_words || '∞'}
-            </Descriptions.Item>
-          )}
-          {articleType.config.language && (
-            <Descriptions.Item label="语言">
-              {articleType.config.language === 'zh' ? '中文' : 'English'}
-            </Descriptions.Item>
-          )}
-          {articleType.config.tasks?.process_with_llm?.model && (
-            <Descriptions.Item label="文本处理模型">
-              {articleType.config.tasks.process_with_llm.model}
-            </Descriptions.Item>
-          )}
-        </Descriptions>
-      </Card>
+      <div className="inherited-config">
+        <Title level={4}>继承自文章类型的配置</Title>
+        <Divider />
+        
+        {articleType.config.tasks?.process_with_llm?.prompt && (
+          <div className="config-item">
+            <Title level={5}>提示词</Title>
+            <div className="pre-wrap">{articleType.config.tasks.process_with_llm.prompt}</div>
+          </div>
+        )}
+        {articleType?.config?.tasks?.process_with_llm?.prompt && (
+          <Alert 
+            message="提示词已从文章类型继承" 
+            description="如果设置了新的提示词，将覆盖从文章类型继承的提示词。" 
+            type="info" 
+            showIcon 
+          />
+        )}
+      </div>
     );
   };
 
@@ -161,7 +147,7 @@ const Settings = () => {
             label={
               <span>
                 提示词
-                {articleType?.config?.prompt && (
+                {articleType?.config?.tasks?.process_with_llm?.prompt && (
                   <Tag color="blue" style={{ marginLeft: 8 }}>可继承</Tag>
                 )}
               </span>
@@ -169,21 +155,6 @@ const Settings = () => {
             help="如果不设置，将使用文章类型中的提示词"
           >
             <Input.TextArea rows={6} />
-          </Form.Item>
-
-          <Form.Item
-            name="format_prompt"
-            label={
-              <span>
-                格式化提示词
-                {articleType?.config?.format_prompt && (
-                  <Tag color="blue" style={{ marginLeft: 8 }}>可继承</Tag>
-                )}
-              </span>
-            }
-            help="如果不设置，将使用文章类型中的格式化提示词"
-          >
-            <Input.TextArea rows={4} />
           </Form.Item>
 
           <Form.Item

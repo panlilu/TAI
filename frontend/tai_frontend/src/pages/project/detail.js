@@ -24,13 +24,15 @@ const ProjectDetail = () => {
       settingsForm.setFieldsValue({
         name: response.name,
         auto_approve: response.auto_approve,
-        prompt: response.config?.prompt || '',
+        // 从process_with_llm中获取prompt
+        prompt: response.config?.tasks?.process_with_llm?.prompt || '',
         format_prompt: response.config?.format_prompt || '',
         review_criteria: response.config?.review_criteria || '',
         language: response.config?.language || 'zh'
       });
       form.setFieldsValue({
-        prompt: response.config?.prompt || '',
+        // 从process_with_llm中获取prompt
+        prompt: response.config?.tasks?.process_with_llm?.prompt || '',
       });
     } catch (error) {
       message.error('获取项目详情失败');
@@ -60,7 +62,13 @@ const ProjectDetail = () => {
         data: {
           config: {
             ...project.config,  // 保留其他配置
-            prompt: values.prompt
+            tasks: {
+              ...project.config?.tasks,  // 保留其他任务配置
+              process_with_llm: {
+                ...(project.config?.tasks?.process_with_llm || {}),  // 保留其他process_with_llm配置
+                prompt: values.prompt  // 更新prompt
+              }
+            }
           }
         }
       });
@@ -217,18 +225,6 @@ const ProjectDetail = () => {
           </Form.Item>
 
           <Form.Item
-            name="format_prompt"
-            label={
-              <span>
-                格式化提示词
-              </span>
-            }
-            help="如果不设置，将使用文章类型中的格式化提示词"
-          >
-            <Input.TextArea rows={4} />
-          </Form.Item>
-
-          <Form.Item
             name="review_criteria"
             label="评审标准"
             help="设置具体的评审标准和要求"
@@ -293,7 +289,7 @@ const ProjectDetail = () => {
         <Form
           form={form}
           onFinish={handleUpdatePrompt}
-          initialValues={{ prompt: project?.config?.prompt }}
+          initialValues={{ prompt: project?.config?.tasks?.process_with_llm?.prompt }}
           layout="vertical"
         >
           <Form.Item

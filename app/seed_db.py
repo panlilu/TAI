@@ -6,8 +6,7 @@ from app.schemas import UserRole
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-prompt='''
-#论文标准
+prompt='''#论文标准
 ## 论文内容要求
 * 具体的项目描述（需求分析）：
   - 项目背景，使用环境，要解决的问题：有参数，要定量；
@@ -23,17 +22,39 @@ prompt='''
 * 有设计过程及设计结果展示，设计过程有逻辑性，可自圆其说，可以有小瑕疵 -- 良好
 * 设计工作量大，有真正应用价值，个人逻辑清楚，查重小于10% -- 优秀
 
-根据这个论文标准评价一下这篇论文
-'''
-
-format_prompt = '''
 请按照以下格式输出评审结果：
 
 1. 论文总体评价（200-300字）
 2. 优点（列出3-5点）
 3. 不足（列出2-4点）
 4. 改进建议（针对不足给出具体建议）
-5. 最终评分（百分制）
+5. 评价等级（优秀，良好，及格，不及格）
+6. 最终评分（百分制）
+'''
+
+extraction_prompt = '''请从以下审阅报告中提取结构化数据，以YAML格式返回：
+
+1. 评价等级
+2. 最终评分
+
+使用以下YAML格式：
+
+```yaml
+summary: 简短摘要
+structure_score: 7
+completeness_score: 8
+language_score: 9
+professionalism_score: 7
+format_score: 8
+overall_score: 8
+issues:
+  - 第一个问题
+  - 第二个问题
+suggestions:
+  - 第一个建议
+  - 第二个建议
+```
+
 '''
 
 def seed_database():
@@ -61,22 +82,15 @@ def seed_database():
             name="毕业论文s",
             is_public=True,
             config={
-                "prompt": prompt,
-                "format_prompt": format_prompt,
-                "review_criteria": "论文结构完整性、内容深度、创新性、实用价值、语言表达",
-                "min_words": 5000,
-                "max_words": 15000,
-                "language": "zh",
                 "tasks": {
                     "process_with_llm": {
-                        # "model": "deepseek/deepseek-chat",
+                        "prompt": prompt,
                         "model": "openrouter/qwen/qwq-32b:free",
                         "temperature": 0.7,
                         "max_tokens": 2000,
                         "top_p": 0.95
                     },
                     "ai_review": {
-                        # "model": "deepseek/deepseek-reason",
                         "model": "openrouter/qwen/qwq-32b:free",
                         "temperature": 0.3,
                         "max_tokens": 4000,
@@ -87,37 +101,7 @@ def seed_database():
                         "temperature": 0.2,
                         "max_tokens": 3000,
                         "top_p": 0.8,
-                        "extraction_prompt": """请从以下审阅报告中提取结构化数据，以YAML格式返回：
-
-1. 摘要
-2. 结构评分 (1-10)
-3. 内容完整性评分 (1-10)
-4. 语言表达评分 (1-10)
-5. 专业性评分 (1-10)
-6. 格式规范评分 (1-10)
-7. 总体评分 (1-10)
-8. 问题清单 (列表)
-9. 改进建议 (列表)
-
-使用以下YAML格式：
-
-```yaml
-summary: 简短摘要
-structure_score: 7
-completeness_score: 8
-language_score: 9
-professionalism_score: 7
-format_score: 8
-overall_score: 8
-issues:
-  - 第一个问题
-  - 第二个问题
-suggestions:
-  - 第一个建议
-  - 第二个建议
-```
-
-审阅报告:"""
+                        "extraction_prompt": extraction_prompt
                     }
                 }
             },

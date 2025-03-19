@@ -105,48 +105,6 @@ def extract_text_from_image(file_path: str) -> str:
     except Exception as e:
         return f"Error: Failed to extract text from image: {str(e)}"
 
-def analyze_with_openai(prompt: str, text: str, require_json: bool = False, model_name: str = None) -> str:
-    """使用LiteLLM分析文本"""
-    try:
-        # 使用指定的模型或默认模型
-        model = model_name or os.getenv("LLM_MODEL", "deepseek/deepseek-chat")
-        
-        # 如果需要JSON响应，添加格式要求
-        if require_json:
-            prompt = f"""
-{prompt}
-
-重要提示：你必须返回一个有效的JSON对象。确保：
-1. 响应必须是一个合法的JSON格式
-2. 所有字符串必须使用双引号
-3. 不要包含任何额外的解释文本
-4. 确保所有的键名使用双引号
-"""
-
-        response = completion(
-            model=model,
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": text}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        error_msg = f"Error: Failed to analyze text with LLM: {str(e)}"
-        try:
-            db = SessionLocal()
-            current_job = get_current_job()
-            if current_job and current_job.id:
-                job_task = db.query(JobTask).filter(JobTask.id == current_job.id).first()
-                if job_task:
-                    job_task.logs = error_msg if not job_task.logs else f"{job_task.logs}\n{error_msg}"
-                    db.commit()
-        except Exception:
-            pass
-        finally:
-            if 'db' in locals():
-                db.close()
-        return error_msg
 
 def update_job_status(db: Session, job_id: int):
     """根据所有子任务的状态更新Job的状态和进度"""
@@ -662,41 +620,16 @@ def process_with_llm_task(task_id: int, article_id: int):
         db.commit()
         
         # 构建评审提示词
-        system_prompt = """你是一位专业的文档审阅助手，需要对文档内容进行全面审阅并提供详细报告。
-请按照以下结构返回你的审阅报告：
+        system_prompt = """你是一位专业的文档审阅助手，需要对文档内容进行全面审阅并提供详细报告。"""
 
-# 摘要
-[简要总结文档的主要内容和目的，2-3句话]
+        # 使用配置中的prompt字段，如果存在的话
+        prompt_template = task_config.get('prompt', """请对以下文档内容进行专业审阅：
 
-# 文档结构评估
-[分析文档的组织结构是否清晰、逻辑是否连贯，段落划分是否合理]
+{text}
+""")
 
-# 内容完整性
-[评估文档内容是否完整，是否缺少重要信息]
-
-# 语言表达
-[评估文档的语言表达是否清晰、准确、专业]
-
-# 专业性评估
-[评估文档的专业水平，包括术语使用、论证方式等]
-
-# 格式规范
-[评估文档格式是否符合规范，包括标点、排版等]
-
-# 具体问题清单
-[列出文档中发现的具体问题，包括错误、不一致、不清晰的表述等]
-
-# 改进建议
-[提供具体的改进建议]
-
-# 总体评分
-[给出总体评分，1-10分]
-"""
-
-        user_prompt = f"""请对以下文档内容进行专业审阅：
-
-{markdown_text}
-"""
+        # 将markdown_text插入到提示词中
+        user_prompt = prompt_template.replace("{text}", markdown_text)
         
         try:
             # 调用AI模型生成审阅报告
@@ -706,7 +639,8 @@ def process_with_llm_task(task_id: int, article_id: int):
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                **{k: v for k, v in task_config.items() if k != 'model'}  # 排除model字段，添加其他配置
+                temperature=task_config.get('temperature', 0.7),
+                max_tokens=task_config.get('max_tokens', 4000)
             )
             
             ai_review_content = response.choices[0].message.content
@@ -1223,7 +1157,8 @@ suggestions:
                     {"role": "system", "content": "你是一个数据提取助手，擅长从文本中提取结构化数据。请根据给定的格式提取数据，并以YAML格式返回。"},
                     {"role": "user", "content": prompt}
                 ],
-                **{k: v for k, v in task_config.items() if k != 'model'}  # 排除model字段，添加其他配置
+                temperature=task_config.get('temperature', 0.7),
+                max_tokens=task_config.get('max_tokens', 4000)
             )
             
             yaml_content = response.choices[0].message.content
