@@ -207,6 +207,12 @@ class AdvancedMarkdownConverter:
                 
                 # 使用LLM生成图片描述
                 self.logger(f"使用模型 {self.image_model} 生成图片描述")
+                
+                # 检查是否使用 lm_studio 模型，如果是则添加 base_url 参数
+                model_params = {}
+                if self.image_model.startswith("lm_studio"):
+                    model_params["base_url"] = "http://127.0.0.1:1234/v1"
+                
                 response = completion(
                     model=self.image_model,
                     messages=[
@@ -215,7 +221,8 @@ class AdvancedMarkdownConverter:
                             {"type": "text", "text": "请描述这张图片的内容，提供清晰、准确的描述。"},
                             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
                         ]}
-                    ]
+                    ],
+                    **model_params
                 )
                 
                 # 获取描述文本
