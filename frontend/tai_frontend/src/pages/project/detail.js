@@ -13,7 +13,6 @@ const ProjectDetail = () => {
   const [project, setProject] = useState(null);
   const [articles, setArticles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [form] = Form.useForm();
   const [settingsForm] = Form.useForm();  // 为项目设置添加单独的 form 实例
 
   // 使用useCallback来缓存函数
@@ -30,14 +29,10 @@ const ProjectDetail = () => {
         review_criteria: response.config?.review_criteria || '',
         language: response.config?.language || 'zh'
       });
-      form.setFieldsValue({
-        // 从process_with_llm中获取prompt
-        prompt: response.config?.tasks?.process_with_llm?.prompt || '',
-      });
     } catch (error) {
       message.error('获取项目详情失败');
     }
-  }, [id, form, settingsForm]);
+  }, [id, settingsForm]);
 
   const fetchArticles = useCallback(async () => {
     try {
@@ -53,31 +48,6 @@ const ProjectDetail = () => {
     fetchProject();
     fetchArticles();
   }, [id, fetchProject, fetchArticles]);
-
-  // 更新项目Prompt
-  const handleUpdatePrompt = async (values) => {
-    try {
-      await request(`/projects/${id}`, {
-        method: 'PUT',
-        data: {
-          config: {
-            ...project.config,  // 保留其他配置
-            tasks: {
-              ...project.config?.tasks,  // 保留其他任务配置
-              process_with_llm: {
-                ...(project.config?.tasks?.process_with_llm || {}),  // 保留其他process_with_llm配置
-                prompt: values.prompt  // 更新prompt
-              }
-            }
-          }
-        }
-      });
-      message.success('更新成功');
-      fetchProject();
-    } catch (error) {
-      message.error('更新失败');
-    }
-  };
 
   // 删除文章
   const handleDeleteArticle = async (articleId) => {
@@ -284,30 +254,6 @@ const ProjectDetail = () => {
     },
     {
       key: '2',
-      label: 'Prompt设置',
-      children: (
-        <Form
-          form={form}
-          onFinish={handleUpdatePrompt}
-          initialValues={{ prompt: project?.config?.tasks?.process_with_llm?.prompt }}
-          layout="vertical"
-        >
-          <Form.Item
-            name="prompt"
-            label="审阅提示"
-          >
-            <Input.TextArea rows={10} />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit">
-              保存
-            </Button>
-          </Form.Item>
-        </Form>
-      )
-    },
-    {
-      key: '3',
       label: '项目设定',
       children: renderProjectSettings()
     }
