@@ -12,6 +12,8 @@ const ArticleType = () => {
   const [availableModels, setAvailableModels] = useState([]);
   const [aiReviewModels, setAiReviewModels] = useState([]);
   const [processWithLlmModels, setProcessWithLlmModels] = useState([]);
+  const [imageDescriptionModels, setImageDescriptionModels] = useState([]);
+  const [showImageDescriptionOptions, setShowImageDescriptionOptions] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -37,6 +39,10 @@ const ArticleType = () => {
       // 获取LLM处理任务可用的模型
       const processModelsData = await request.get('/tasks/process_with_llm/models');
       setProcessWithLlmModels(processModelsData);
+      
+      // 获取图片描述可用的模型
+      const imageDescriptionModelsData = await request.get('/tasks/convert_to_markdown/image_description_models');
+      setImageDescriptionModels(imageDescriptionModelsData);
     } catch (error) {
       message.error('获取模型配置失败');
     }
@@ -63,6 +69,10 @@ const ArticleType = () => {
       min_words: record.config?.min_words || 0,
       max_words: record.config?.max_words || 0,
       language: record.config?.language || 'zh',
+      // Markdown转换配置
+      markdown_conversion_type: record.config?.tasks?.convert_to_markdown?.conversion_type || 'simple',
+      enable_image_description: record.config?.tasks?.convert_to_markdown?.enable_image_description !== false, // 默认为true
+      image_description_model: record.config?.tasks?.convert_to_markdown?.image_description_model || 'lm_studio/qwen2.5-vl-7b-instruct',
       // LLM配置
       ai_review_model: record.config?.tasks?.ai_review?.model || '',
       ai_review_temperature: record.config?.tasks?.ai_review?.temperature || 0.3,
@@ -73,6 +83,7 @@ const ArticleType = () => {
       process_max_tokens: record.config?.tasks?.process_with_llm?.max_tokens || 2000,
       process_top_p: record.config?.tasks?.process_with_llm?.top_p || 0.95,
     });
+    setShowImageDescriptionOptions(record.config?.tasks?.convert_to_markdown?.conversion_type === 'advanced');
     setEditingId(record.id);
     setModalVisible(true);
   };
@@ -101,6 +112,11 @@ const ArticleType = () => {
           max_words: values.max_words || 0,
           language: values.language || 'zh',
           tasks: {
+            convert_to_markdown: {
+              conversion_type: values.markdown_conversion_type || 'simple',
+              enable_image_description: values.enable_image_description,
+              image_description_model: values.image_description_model || 'lm_studio/qwen2.5-vl-7b-instruct',
+            },
             ai_review: {
               model: values.ai_review_model || '',
               temperature: values.ai_review_temperature || 0.3,
@@ -175,6 +191,58 @@ const ArticleType = () => {
 
   // 定义Collapse的items配置
   const collapseItems = [
+    {
+      key: 'markdown_conversion',
+      label: 'Markdown转换配置',
+      children: (
+        <>
+          <Form.Item
+            name="markdown_conversion_type"
+            label="Markdown转换类型"
+            help="选择文档转换为Markdown的方式，高级模式需要配置Mistral API Key"
+          >
+            <Select 
+              placeholder="选择转换类型"
+              onChange={(value) => setShowImageDescriptionOptions(value === 'advanced')}
+            >
+              <Select.Option value="simple">简单模式（默认）</Select.Option>
+              <Select.Option value="advanced">高级模式（支持OCR和图片描述）</Select.Option>
+            </Select>
+          </Form.Item>
+          
+          {showImageDescriptionOptions && (
+            <>
+              <Form.Item
+                name="enable_image_description"
+                label="启用图片描述"
+                valuePropName="checked"
+                help="启用后会使用AI生成图片描述"
+              >
+                <Switch />
+              </Form.Item>
+              
+              <Form.Item
+                name="image_description_model"
+                label="图片描述模型"
+                help="选择用于生成图片描述的模型"
+                dependencies={['enable_image_description']}
+              >
+                <Select 
+                  placeholder="选择模型"
+                  disabled={!form.getFieldValue('enable_image_description')}
+                >
+                  {imageDescriptionModels.map(model => (
+                    <Select.Option key={model.id} value={model.id}>
+                      {model.name} - {model.description}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </>
+          )}
+        </>
+      )
+    },
     {
       key: 'ai_review',
       label: 'AI审阅模型配置',
@@ -311,6 +379,7 @@ const ArticleType = () => {
           initialValues={{
             is_public: false,
             language: 'zh',
+            markdown_conversion_type: 'simple',
             ai_review_temperature: 0.3,
             ai_review_max_tokens: 4000,
             ai_review_top_p: 0.9,

@@ -361,6 +361,34 @@ def convert_to_markdown_task(task_id: int, article_id: int):
 
         task.logs += f"【信息】正在处理文章: {article.name}，ID: {article.id}\n"
         db.commit()
+        
+        # 获取项目信息，用于获取配置
+        project = db.query(Project).filter(Project.id == article.project_id).first()
+        if not project:
+            error_msg = "错误：找不到项目信息"
+            task.logs += f"【错误】{error_msg}\n"
+            task.status = JobStatus.FAILED
+            db.commit()
+            return
+            
+        # 获取转换配置
+        task_config = get_task_config('convert_to_markdown', project.config)
+        
+        # 获取转换类型，默认为simple
+        conversion_type = task_config.get('conversion_type', 'simple')
+        task.logs += f"【信息】使用转换类型: {conversion_type}\n"
+        db.commit()
+        
+        # 检查图片描述配置
+        enable_image_description = task_config.get('enable_image_description', True)
+        image_description_model = task_config.get('image_description_model', 'lm_studio/qwen2.5-vl-7b-instruct')
+        
+        if conversion_type == 'advanced':
+            if enable_image_description:
+                task.logs += f"【信息】启用图片描述功能，使用模型: {image_description_model}\n"
+            else:
+                task.logs += "【信息】图片描述功能已禁用\n"
+        db.commit()
 
         # 检查文章是否有附件
         if not article.attachments or len(article.attachments) == 0:
@@ -428,7 +456,32 @@ def convert_to_markdown_task(task_id: int, article_id: int):
             task.logs += "【处理】开始转换文件为Markdown...\n"
             db.commit()
             
-            markdown_text = convert_file_to_markdown(file_path)
+            # 根据配置类型选择转换方法
+            if conversion_type == 'advanced' and file_ext.lower() == '.pdf':
+                # 检查环境变量中是否有API密钥
+                mistral_api_key = os.environ.get("MISTRAL_API_KEY")
+                if mistral_api_key:
+                    task.logs += "【信息】使用环境变量中的Mistral API密钥\n"
+                    task_config["mistral_api_key"] = mistral_api_key
+                    task.logs += "【信息】使用高级转换模式处理PDF文件\n"
+                    db.commit()
+                # 如果环境变量中没有API密钥，检查配置中是否有
+                elif 'mistral_api_key' not in task_config or not task_config['mistral_api_key']:
+                    task.logs += "【警告】高级转换模式需要Mistral API密钥，可通过环境变量MISTRAL_API_KEY设置或在项目配置中提供，回退到简单模式\n"
+                    db.commit()
+                    conversion_type = 'simple'
+                else:
+                    task.logs += "【信息】使用项目配置中的Mistral API密钥\n"
+                    task.logs += "【信息】使用高级转换模式处理PDF文件\n"
+                    db.commit()
+                
+                # 如果是高级模式且启用了图片描述，将模型名和启用状态传给配置
+                if conversion_type == 'advanced':
+                    task_config['enable_image_description'] = enable_image_description
+                    task_config['image_description_model'] = image_description_model
+            
+            # 调用转换函数
+            markdown_text = convert_file_to_markdown(file_path, conversion_type, task_config)
             
             task.progress = 80
             task.logs += "【处理】文件转换完成，正在保存结果...\n"

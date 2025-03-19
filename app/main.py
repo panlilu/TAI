@@ -1471,3 +1471,42 @@ async def get_user_stats(
         "active_jobs": active_jobs
     }
 
+@api_app.get("/tasks/ai_review/models", tags=["Model Configuration"])
+async def get_ai_review_models(
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """获取AI审阅任务可用的模型列表"""
+    available_models = tasks.get_available_models_for_task("ai_review")
+    result = []
+    for model_id in available_models:
+        model_detail = tasks.get_model_details(model_id)
+        if model_detail:
+            result.append(model_detail)
+    return result
+
+@api_app.get("/tasks/convert_to_markdown/image_description_models", tags=["Model Configuration"])
+async def get_image_description_models(
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """获取图片描述任务可用的模型列表"""
+    available_models = tasks.MODEL_CONFIG.get("tasks", {}).get("convert_to_markdown", {}).get("available_image_description_models", [])
+    result = []
+    for model_id in available_models:
+        model_detail = tasks.get_model_details(model_id)
+        if model_detail:
+            result.append(model_detail)
+    return result
+
+@api_app.get("/tasks/process_with_llm/models", tags=["Model Configuration"])
+async def get_process_with_llm_models(
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    """获取LLM处理任务可用的模型列表"""
+    available_models = tasks.get_available_models_for_task("process_with_llm")
+    result = []
+    for model_id in available_models:
+        model_detail = tasks.get_model_details(model_id)
+        if model_detail:
+            result.append(model_detail)
+    return result
+

@@ -17,8 +17,38 @@ id = "openrouter/qwen/qwq-32b:free"
 name = "QwQ 32B"
 description = "QwQ 32B 是一个大规模预训练模型，提供免费使用的版本，适合多种复杂任务"
 
+[[models]]
+id = "lm_studio/qwen2.5-vl-7b-instruct"
+name = "Qwen2.5 VL 7B（本地运行）"
+description = "Qwen2.5 VL是一个多模态模型，具有图像理解能力，可用于生成图片描述"
+
+[[models]]
+id = "lm_studio/mistral-small-3.1-24b-instruct-2503"
+name = "Mistral Small 3.1 24B（本地运行）"
+description = "Mistral Small 3.1 24B是一个多模态模型，具有图片理解能力同时也有很强的对话能力"
+
+[[models]]
+id = "lm_studio/gemma-3-12b-it"
+name = "Gemma3-12b（本地运行）"
+description = "Gemma3 12B 是一个多模态模型，具有图片理解能力同时也有很强的对话能力"
+
 # 任务配置
 [tasks]
+
+[tasks.convert_to_markdown]
+description = "将文档转换为Markdown格式的任务"
+# 增加图片描述模型配置项
+available_image_description_models = [
+    "lm_studio/qwen2.5-vl-7b-instruct",
+    "lm_studio/gemma-3-12b-it"
+]
+default_image_description_model = "lm_studio/qwen2.5-vl-7b-instruct"
+
+[tasks.convert_to_markdown.default_config]
+conversion_type = "simple"
+mistral_api_key = ""  # 可以留空，优先从环境变量MISTRAL_API_KEY获取
+image_description_model = "lm_studio/qwen2.5-vl-7b-instruct"  # 用于图片描述的模型
+enable_image_description = true  # 是否启用图片描述功能
 
 [tasks.process_with_llm]
 available_models = [
