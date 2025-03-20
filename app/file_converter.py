@@ -1,6 +1,6 @@
 import os
 from docx import Document
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 from PIL import Image
 import pytesseract
 from pathlib import Path

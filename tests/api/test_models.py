@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock
 class TestModelConfigAPI:
     """模型配置API测试类"""
     
-    @patch("app.main.tasks.get_model_config")
+    @patch("app.tasks.get_model_config")
     def test_get_models(self, mock_get_model_config, client: TestClient, user_token_headers):
         """测试获取模型列表"""
         # 模拟返回值
@@ -25,7 +25,7 @@ class TestModelConfigAPI:
         assert "gpt-3.5" in data
         assert "gpt-4" in data
     
-    @patch("app.main.tasks.get_model_config")
+    @patch("app.tasks.get_model_config")
     def test_get_model_details(self, mock_get_model_config, client: TestClient, user_token_headers):
         """测试获取模型详情"""
         # 模拟返回值
@@ -43,7 +43,7 @@ class TestModelConfigAPI:
         assert data["type"] == "openai"
         assert data["max_tokens"] == 8192
     
-    @patch("app.main.tasks.get_model_config")
+    @patch("app.tasks.get_model_config")
     def test_get_task_models(self, mock_get_model_config, client: TestClient, user_token_headers):
         """测试获取任务模型"""
         # 模拟返回值
@@ -62,7 +62,7 @@ class TestModelConfigAPI:
         assert "gpt-3.5" in data
         assert "gpt-4" in data
     
-    @patch("app.main.tasks.get_model_config")
+    @patch("app.tasks.get_model_config")
     def test_get_model_config(self, mock_get_model_config, client: TestClient, user_token_headers):
         """测试获取模型配置"""
         # 模拟返回值

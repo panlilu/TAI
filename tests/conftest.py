@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from app.database import Base, get_db
 from app import models
 from app.auth import get_password_hash
-from app.schemas import UserRole
+from app.schemas import UserRole, JobStatus, JobTaskType, JobAction
 
 # 测试数据库URL
 TEST_DATABASE_URL = "sqlite:///./test.db"
@@ -145,4 +145,27 @@ def test_project(db, test_user, test_article_type):
     db.add(project)
     db.commit()
     db.refresh(project)
-    return project 
+    return project
+
+@pytest.fixture
+def test_article(db, test_user, test_article_type, test_project):
+    """创建测试文章"""
+    from datetime import datetime
+    
+    article = models.Article(
+        name="测试文章",
+        attachments=[
+            {
+                "path": "test/path.txt",
+                "is_active": True,
+                "filename": "test.txt",
+                "created_at": datetime.now().isoformat()
+            }
+        ],
+        article_type_id=test_article_type.id,
+        project_id=test_project.id
+    )
+    db.add(article)
+    db.commit()
+    db.refresh(article)
+    return article 

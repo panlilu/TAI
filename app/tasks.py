@@ -8,7 +8,7 @@ from .database import SessionLocal
 from .models import Job, JobTask, Article, Project, AIReviewReport
 from .schemas import ArticleCreate, JobStatus, JobTaskType
 from docx import Document
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 from PIL import Image
 import pytesseract
 from litellm import completion
@@ -49,8 +49,7 @@ MODEL_CONFIG = load_model_config()
 # 获取任务可用的模型列表
 def get_available_models_for_task(task_type):
     """获取特定任务类型可用的模型列表"""
-    task_config = MODEL_CONFIG.get("tasks", {}).get(task_type, {})
-    return task_config.get("available_models", [])
+    return MODEL_CONFIG.get("task_models", {}).get(task_type, [])
 
 # 获取任务的默认模型
 def get_default_model_for_task(task_type):
@@ -1173,3 +1172,8 @@ def extract_structured_data(article_id: int, job_id: int):
         raise
     finally:
         db.close()
+
+# 获取完整的模型配置
+def get_model_config():
+    """获取完整的模型配置"""
+    return MODEL_CONFIG

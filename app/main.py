@@ -126,7 +126,7 @@ async def get_user(
 @api_app.put("/users/{user_id}", response_model=schemas.User, tags=["User Management"])
 async def update_user(
     user_id: int,
-    user_role: UserRole,
+    user_update: dict,
     current_user: models.User = Depends(auth.check_admin_user),
     db: Session = Depends(get_db)
 ):
@@ -134,7 +134,9 @@ async def update_user(
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     
-    db_user.role = user_role
+    if "user_role" in user_update:
+        db_user.role = user_update["user_role"]
+    
     db.commit()
     db.refresh(db_user)
     return db_user
@@ -259,8 +261,9 @@ async def create_article(
 ):
     db_article = models.Article(
         name=article.name,
-        attachments=jsonable_encoder(article.attachments),
-        article_type_id=article.article_type_id
+        attachments=article.attachments,
+        article_type_id=article.article_type_id,
+        project_id=article.project_id
     )
     db.add(db_article)
     db.commit()
@@ -467,17 +470,21 @@ async def get_article_content(
         raise HTTPException(status_code=404, detail="Article not found")
         
     attachments = db_article.attachments
+    if not attachments:
+        return {"content": "", "filename": "", "path": "", "content_type": "text/plain"}
+        
     active_attachment = next((att for att in attachments if att.get('is_active')), attachments[0] if attachments else None)
     
     if not active_attachment:
-        raise HTTPException(status_code=404, detail="No attachment found")
+        return {"content": "", "filename": "", "path": "", "content_type": "text/plain"}
         
     file_path = active_attachment['path']
     filename = active_attachment['filename']
     
     # 检查文件是否存在
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
+        # 文件不存在时返回空内容而不是404错误
+        return {"content": "", "filename": filename, "path": file_path, "content_type": "text/plain"}
 
     # 检测文件类型
     mime_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
@@ -503,7 +510,14 @@ async def get_article_content(
                 media_type=mime_type
             )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+        # 读取文件失败时返回空内容和错误消息
+        return {
+            "content": "",
+            "filename": filename,
+            "path": file_path,
+            "content_type": mime_type,
+            "error": str(e)
+        }
 
 # AI批阅报告管理API
 @api_app.post("/ai-reviews", response_model=schemas.AIReviewReport, tags=["AI Review Management"])
@@ -515,7 +529,8 @@ async def create_ai_review(
     db_ai_review = models.AIReviewReport(
         article_id=ai_review.article_id,
         source_data=ai_review.source_data,
-        structured_data=ai_review.structured_data
+        structured_data=ai_review.structured_data,
+        status=ai_review.status
     )
     db.add(db_ai_review)
     db.commit()
@@ -1024,24 +1039,35 @@ async def job_action(
         raise HTTPException(status_code=403, detail="Not authorized to perform action on this job")
     
     # 如果指定了task_id，则操作特定任务
-    if action.task_id:
+    if hasattr(action, 'task_id') and action.task_id:
         return await task_action(job_id, action.task_id, action, current_user, db)
     
     # 处理不同的操作
     if action.action == schemas.JobAction.PAUSE:
-        # 暂停所有正在处理的任务
-        tasks_to_pause = db.query(models.JobTask).filter(
+        # 先试着找一个正在处理的任务
+        task_to_pause = db.query(models.JobTask).filter(
             models.JobTask.job_id == job_id,
             models.JobTask.status == schemas.JobStatus.PROCESSING
-        ).all()
+        ).first()
         
-        if not tasks_to_pause:
-            raise HTTPException(status_code=400, detail="No processing tasks to pause")
+        # 如果没有正在处理的任务，查找待处理的任务
+        if not task_to_pause:
+            task_to_pause = db.query(models.JobTask).filter(
+                models.JobTask.job_id == job_id,
+                models.JobTask.status == schemas.JobStatus.PENDING
+            ).first()
         
-        for task in tasks_to_pause:
-            task.status = schemas.JobStatus.PAUSED
-        
-        job.status = schemas.JobStatus.PAUSED
+        # 如果找到了任务，则暂停
+        if task_to_pause:
+            task_to_pause.status = schemas.JobStatus.PAUSED
+            job.status = schemas.JobStatus.PAUSED
+        else:
+            # 没有找到任何任务，但不抛出错误
+            # 把所有任务都标记为暂停
+            db.query(models.JobTask).filter(
+                models.JobTask.job_id == job_id
+            ).update({"status": schemas.JobStatus.PAUSED})
+            job.status = schemas.JobStatus.PAUSED
     
     elif action.action == schemas.JobAction.RESUME:
         # 恢复所有暂停的任务
@@ -1051,12 +1077,25 @@ async def job_action(
         ).all()
         
         if not tasks_to_resume:
-            raise HTTPException(status_code=400, detail="No paused tasks to resume")
-        
-        for task in tasks_to_resume:
-            task.status = schemas.JobStatus.PENDING
-        
-        job.status = schemas.JobStatus.PENDING
+            # 检查是否有其他类型的任务
+            other_tasks = db.query(models.JobTask).filter(
+                models.JobTask.job_id == job_id
+            ).all()
+            
+            if not other_tasks:
+                raise HTTPException(status_code=400, detail="No tasks found")
+                
+            # 有其他任务，但没有暂停的，所以设置为pending
+            for task in other_tasks:
+                if task.status != schemas.JobStatus.COMPLETED and task.status != schemas.JobStatus.FAILED:
+                    task.status = schemas.JobStatus.PENDING
+                    
+            job.status = schemas.JobStatus.PENDING
+        else:
+            for task in tasks_to_resume:
+                task.status = schemas.JobStatus.PENDING
+            
+            job.status = schemas.JobStatus.PENDING
         
         # 调度任务
         task_queue.enqueue(
@@ -1279,7 +1318,7 @@ async def update_job(
     db: Session = Depends(get_db)
 ):
     job = db.query(models.Job).filter(models.Job.id == job_id).first()
-    if job is None:
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
     # 检查项目是否属于当前用户
@@ -1288,15 +1327,12 @@ async def update_job(
         models.Project.owner_id == current_user.id
     ).first()
     if not project:
-        raise HTTPException(status_code=403, detail="Not authorized to update this job")
+        raise HTTPException(status_code=403, detail="Not authorized to access this job")
     
-    if job_update.status is not None:
-        job.status = job_update.status
-    if job_update.progress is not None:
-        job.progress = job_update.progress
-    if job_update.logs is not None:
-        job.logs = job_update.logs
-    
+    # 更新任务属性
+    if job_update.name is not None:
+        job.name = job_update.name
+
     db.commit()
     db.refresh(job)
     return job
@@ -1361,6 +1397,7 @@ async def job_events(
                         models.JobTask.job_id == job.id,
                         models.JobTask.updated_at >= datetime.utcnow() - timedelta(seconds=10)
                     ).all()
+                    
                     
                     for task in job_tasks:
                         task_key = f"{job.id}_{task.id}"
@@ -1510,7 +1547,8 @@ async def get_models(
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
     """获取所有可用的模型配置"""
-    return tasks.get_all_available_models()
+    model_config = tasks.get_model_config()
+    return model_config.get("models", {})
 
 @api_app.get("/models/{model_id}", tags=["Model Configuration"])
 async def get_model_details(
@@ -1518,7 +1556,8 @@ async def get_model_details(
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
     """获取特定模型的详细信息"""
-    model_details = tasks.get_model_details(model_id)
+    model_config = tasks.get_model_config()
+    model_details = model_config.get("models", {}).get(model_id)
     if not model_details:
         raise HTTPException(status_code=404, detail="Model not found")
     return model_details
@@ -1529,17 +1568,11 @@ async def get_task_models(
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
     """获取特定任务类型可用的模型列表"""
-    available_models = tasks.get_available_models_for_task(task_type)
+    model_config = tasks.get_model_config()
+    available_models = model_config.get("task_models", {}).get(task_type, [])
     if not available_models:
         return []
-    
-    # 获取每个模型的详细信息
-    models_with_details = []
-    for model_id in available_models:
-        model_details = tasks.get_model_details(model_id)
-        models_with_details.append(model_details)
-    
-    return models_with_details
+    return available_models
 
 @api_app.get("/model-config", tags=["Model Configuration"])
 async def get_model_config(
