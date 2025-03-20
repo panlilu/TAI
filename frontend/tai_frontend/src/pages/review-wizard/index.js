@@ -68,6 +68,16 @@ const ReviewWizard = () => {
     handleSearch('');
   }, []);
 
+  // 当文章类型列表加载完成后，设置默认选中第一个
+  useEffect(() => {
+    if (articleTypes.length > 0) {
+      form.setFieldsValue({
+        articleType: articleTypes[0].id
+      });
+      prevArticleTypeId.current = articleTypes[0].id;
+    }
+  }, [articleTypes, form]);
+
   // 预加载模型数据
   useEffect(() => {
     if (current === 0) {
@@ -138,6 +148,8 @@ const ReviewWizard = () => {
             filterOption={false}
             onSearch={handleSearch}
             loading={loading}
+            optionFilterProp="children"
+            defaultActiveFirstOption
           >
             {articleTypes.map(type => (
               <Option key={type.id} value={type.id}>
@@ -226,13 +238,11 @@ const ReviewWizard = () => {
       const values = form.getFieldsValue();
       const currentArticleTypeId = values.articleType;
       
-      // 如果文章类型发生变化，创建新项目
+      // 在第一步，始终创建新项目
       if (current === 0) {
-        if (currentArticleTypeId !== prevArticleTypeId.current) {
-          const project = await createProject(currentArticleTypeId);
-          setProjectId(project.id);
-          prevArticleTypeId.current = currentArticleTypeId;
-        }
+        const project = await createProject(currentArticleTypeId);
+        setProjectId(project.id);
+        prevArticleTypeId.current = currentArticleTypeId;
       }
       
       // 如果是第二步，保存项目参数
