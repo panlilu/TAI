@@ -54,8 +54,10 @@ export const getAllModels = async () => {
   }
 };
 
-export default {
+const modelUtils = {
   getTaskModels,
   getImageDescriptionModels,
   getAllModels
-}; 
+};
+
+export default modelUtils; 

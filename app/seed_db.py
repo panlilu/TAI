@@ -67,7 +67,7 @@ def seed_database():
     if not db.query(ArticleType).filter(ArticleType.name == "毕业论文s").first():
         # 创建文章类型，添加LLM任务相关的配置
         article_type = ArticleType(
-            name="毕业论文s",
+            name="毕业论文",
             is_public=True,
             config={
                 "tasks": {

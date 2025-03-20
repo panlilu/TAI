@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Form, Select, Input, InputNumber, Switch, Collapse } from 'antd';
-import request from '../../../utils/request';
 import { getTaskModels, getImageDescriptionModels } from '../../../utils/modelUtils';
 
 const ArticleTypeConfigForm = ({ 
@@ -14,22 +13,7 @@ const ArticleTypeConfigForm = ({
   const [extractStructuredDataModels, setExtractStructuredDataModels] = useState([]);
   const [loading, setLoading] = useState(false);
   
-  useEffect(() => {
-    // 如果外部提供了模型数据，优先使用外部数据
-    if (externalProcessModels) {
-      setProcessWithLlmModels(externalProcessModels);
-    }
-    if (externalExtractModels) {
-      setExtractStructuredDataModels(externalExtractModels);
-    }
-    
-    // 如果外部没有提供数据，则自行获取
-    if (!externalProcessModels || !externalExtractModels) {
-      fetchModels();
-    }
-  }, [externalProcessModels, externalExtractModels]);
-
-  const fetchModels = async () => {
+  const fetchModels = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -62,7 +46,22 @@ const ArticleTypeConfigForm = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [externalProcessModels, externalExtractModels]);
+
+  useEffect(() => {
+    // 如果外部提供了模型数据，优先使用外部数据
+    if (externalProcessModels) {
+      setProcessWithLlmModels(externalProcessModels);
+    }
+    if (externalExtractModels) {
+      setExtractStructuredDataModels(externalExtractModels);
+    }
+    
+    // 如果外部没有提供数据，则自行获取
+    if (!externalProcessModels || !externalExtractModels) {
+      fetchModels();
+    }
+  }, [externalProcessModels, externalExtractModels, fetchModels]);
 
   // 定义Collapse的items配置
   const collapseItems = [
@@ -214,7 +213,7 @@ const ArticleTypeConfigForm = ({
               style={{ flex: 1 }}
               help="控制输出的随机性，值越低越确定"
             >
-              <InputNumber min={0} max={1} step={0.1} defaultValue={0.7} />
+              <InputNumber min={0} max={1} step={0.1} />
             </Form.Item>
 
             <Form.Item
@@ -223,7 +222,7 @@ const ArticleTypeConfigForm = ({
               style={{ flex: 1 }}
               help="生成文本的最大长度"
             >
-              <InputNumber min={100} max={8000} step={100} defaultValue={2000} />
+              <InputNumber min={100} max={8000} step={100} />
             </Form.Item>
 
             <Form.Item
@@ -232,7 +231,7 @@ const ArticleTypeConfigForm = ({
               style={{ flex: 1 }}
               help="控制输出的多样性"
             >
-              <InputNumber min={0} max={1} step={0.05} defaultValue={0.95} />
+              <InputNumber min={0} max={1} step={0.05} />
             </Form.Item>
           </div>
         </>
@@ -264,7 +263,7 @@ const ArticleTypeConfigForm = ({
               style={{ flex: 1 }}
               help="控制输出的随机性，值越低越确定"
             >
-              <InputNumber min={0} max={1} step={0.1} defaultValue={0.7} />
+              <InputNumber min={0} max={1} step={0.1} />
             </Form.Item>
 
             <Form.Item
@@ -273,7 +272,7 @@ const ArticleTypeConfigForm = ({
               style={{ flex: 1 }}
               help="生成文本的最大长度"
             >
-              <InputNumber min={100} max={8000} step={100} defaultValue={2000} />
+              <InputNumber min={100} max={8000} step={100} />
             </Form.Item>
 
             <Form.Item
@@ -282,7 +281,7 @@ const ArticleTypeConfigForm = ({
               style={{ flex: 1 }}
               help="控制输出的多样性"
             >
-              <InputNumber min={0} max={1} step={0.05} defaultValue={0.95} />
+              <InputNumber min={0} max={1} step={0.05} />
             </Form.Item>
           </div>
 
