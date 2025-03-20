@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Steps, Button, Form, Select, Upload, message, Input } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
+import { Steps, Button, Form, Select, Upload, message, Input, Row, Col, Card, Typography } from 'antd';
+import { UploadOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
+import { useNavigate } from 'react-router-dom';
 import './style.css';
 
 const { Step } = Steps;
 const { Option } = Select;
+const { Title, Paragraph } = Typography;
 
 const getArticleTypes = async (q) => {
   return await request.get('/article-types?q='+q);
@@ -42,6 +44,7 @@ const ReviewWizard = () => {
   const [articleTypes, setArticleTypes] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const prevArticleTypeId = useRef(null);
+  const navigate = useNavigate();
 
   const handleSearch = async (q) => {
     try {
@@ -146,7 +149,31 @@ const ReviewWizard = () => {
     },
     {
       title: '完成',
-      content: '审阅结果将在此显示',
+      content: (
+        <Card className="complete-card">
+          <Row align="middle" justify="center">
+            <Col span={24} style={{ textAlign: 'center' }}>
+              <CheckCircleOutlined style={{ fontSize: '64px', color: '#52c41a', marginBottom: '24px' }} />
+              <Title level={3}>恭喜！您已成功提交文章进行处理</Title>
+              <Paragraph>
+                系统正在为您处理文章，请通过以下链接查看处理进度和结果
+              </Paragraph>
+              <Row gutter={16} justify="center" style={{ marginTop: '32px' }}>
+                <Col>
+                  <Button type="primary" size="large" onClick={() => navigate('/jobs')}>
+                    查看任务进度
+                  </Button>
+                </Col>
+                <Col>
+                  <Button size="large" onClick={() => navigate(`/project/${projectId}`)}>
+                    查看项目详情
+                  </Button>
+                </Col>
+              </Row>
+            </Col>
+          </Row>
+        </Card>
+      ),
     },
   ];
 
@@ -217,7 +244,7 @@ const ReviewWizard = () => {
       </div>
 
       <div className="steps-action">
-        {(
+        {current > 0 && current < steps.length - 1 && (
           <Button style={{ margin: '0 8px' }} onClick={prev}>
             上一步
           </Button>
@@ -225,11 +252,6 @@ const ReviewWizard = () => {
         {current < steps.length - 1 && (
           <Button type="primary" onClick={next}>
             下一步
-          </Button>
-        )}
-        {current === steps.length - 1 && (
-          <Button type="primary" onClick={() => message.success('处理完成!')}>
-            完成
           </Button>
         )}
       </div>

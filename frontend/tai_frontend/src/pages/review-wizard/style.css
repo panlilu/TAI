@@ -27,3 +27,15 @@
 .ant-upload {
   width: 100%;
 }
+
+.complete-card {
+  padding: 24px;
+  text-align: center;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+}
+
+.complete-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
