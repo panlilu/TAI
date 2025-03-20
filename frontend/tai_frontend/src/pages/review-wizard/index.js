@@ -4,6 +4,8 @@ import { UploadOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
 import { useNavigate } from 'react-router-dom';
 import './style.css';
+import ArticleTypeConfigForm from '../article-type/components/ArticleTypeConfigForm';
+import { getTaskModels } from '../../utils/modelUtils';
 
 const { Step } = Steps;
 const { Option } = Select;
@@ -44,6 +46,9 @@ const ReviewWizard = () => {
   const [articleTypes, setArticleTypes] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const prevArticleTypeId = useRef(null);
+  const [configFormKey, setConfigFormKey] = useState(0);
+  const [processModels, setProcessModels] = useState([]);
+  const [extractModels, setExtractModels] = useState([]);
   const navigate = useNavigate();
 
   const handleSearch = async (q) => {
@@ -63,14 +68,51 @@ const ReviewWizard = () => {
     handleSearch('');
   }, []);
 
+  // 预加载模型数据
+  useEffect(() => {
+    if (current === 0) {
+      // 当用户在第一步时，预加载模型数据
+      const preloadModels = async () => {
+        try {
+          const [processModelsData, extractModelsData] = await Promise.all([
+            getTaskModels('process_with_llm'),
+            getTaskModels('extract_structured_data')
+          ]);
+          setProcessModels(processModelsData);
+          setExtractModels(extractModelsData);
+        } catch (error) {
+          console.error('预加载模型数据失败:', error);
+        }
+      };
+      preloadModels();
+    }
+  }, [current]);
+
   useEffect(() => {
     if (current === 1 && projectId) {
+      // 当切换到步骤二时，更新key强制刷新配置表单
+      setConfigFormKey(prevKey => prevKey + 1);
+      
       const fetchProject = async () => {
         try {
           const project = await getProject(projectId);
+          
+          // 如果预加载的模型数据可用，确保表单能够获取到
           form.setFieldsValue({
             projectName: project.name,
-            prompt: project.config?.tasks?.process_with_llm?.prompt || '',
+            process_prompt: project.config?.tasks?.process_with_llm?.prompt || '',
+            process_model: project.config?.tasks?.process_with_llm?.model || '',
+            process_temperature: project.config?.tasks?.process_with_llm?.temperature || 0.7,
+            process_max_tokens: project.config?.tasks?.process_with_llm?.max_tokens || 2000,
+            process_top_p: project.config?.tasks?.process_with_llm?.top_p || 0.95,
+            markdown_conversion_type: project.config?.tasks?.convert_to_markdown?.conversion_type || project.config?.tasks?.convert_to_markdown?.type || 'simple',
+            enable_image_description: project.config?.tasks?.convert_to_markdown?.image_description?.enabled || false,
+            image_description_model: project.config?.tasks?.convert_to_markdown?.image_description?.model || '',
+            extract_structured_data_model: project.config?.tasks?.extract_structured_data?.model || '',
+            extract_structured_data_temperature: project.config?.tasks?.extract_structured_data?.temperature || 0.7,
+            extract_structured_data_max_tokens: project.config?.tasks?.extract_structured_data?.max_tokens || 2000,
+            extract_structured_data_top_p: project.config?.tasks?.extract_structured_data?.top_p || 0.95,
+            extract_structured_data_extraction_prompt: project.config?.tasks?.extract_structured_data?.extraction_prompt || '',
           });
         } catch (error) {
           console.log(error);
@@ -117,13 +159,13 @@ const ReviewWizard = () => {
           >
             <Input placeholder="请输入项目名称" />
           </Form.Item>
-          <Form.Item
-            name="prompt"
-            label="提示"
-            rules={[{ required: true, message: '请输入提示' }]}
-          >
-            <Input.TextArea rows={4} placeholder="请输入提示" />
-          </Form.Item>
+          <ArticleTypeConfigForm 
+            key={configFormKey} 
+            form={form} 
+            showBasicSettings={false}
+            externalProcessModels={processModels}
+            externalExtractModels={extractModels} 
+          />
         </>
       ),
     },
@@ -195,13 +237,47 @@ const ReviewWizard = () => {
       
       // 如果是第二步，保存项目参数
       if (current === 1) {
-        const { projectName, prompt } = values;
+        const { 
+          projectName, 
+          process_prompt, 
+          process_model, 
+          process_temperature, 
+          process_max_tokens, 
+          process_top_p,
+          markdown_conversion_type,
+          enable_image_description,
+          image_description_model,
+          extract_structured_data_model,
+          extract_structured_data_temperature,
+          extract_structured_data_max_tokens,
+          extract_structured_data_top_p,
+          extract_structured_data_extraction_prompt
+        } = values;
+        
         await updateProject(projectId, {
           name: projectName,
           config: {
             tasks: {
               process_with_llm: {
-                prompt: prompt
+                prompt: process_prompt,
+                model: process_model,
+                temperature: process_temperature,
+                max_tokens: process_max_tokens,
+                top_p: process_top_p
+              },
+              convert_to_markdown: {
+                conversion_type: markdown_conversion_type,
+                image_description: {
+                  enabled: enable_image_description,
+                  model: image_description_model
+                }
+              },
+              extract_structured_data: {
+                model: extract_structured_data_model,
+                temperature: extract_structured_data_temperature,
+                max_tokens: extract_structured_data_max_tokens,
+                top_p: extract_structured_data_top_p,
+                extraction_prompt: extract_structured_data_extraction_prompt
               }
             }
           }

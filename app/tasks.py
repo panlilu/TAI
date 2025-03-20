@@ -49,7 +49,9 @@ MODEL_CONFIG = load_model_config()
 # 获取任务可用的模型列表
 def get_available_models_for_task(task_type):
     """获取特定任务类型可用的模型列表"""
-    return MODEL_CONFIG.get("task_models", {}).get(task_type, [])
+    # 修复：从正确的路径获取模型列表
+    available_models = MODEL_CONFIG.get("tasks", {}).get(task_type, {}).get("available_models", [])
+    return available_models
 
 # 获取任务的默认模型
 def get_default_model_for_task(task_type):

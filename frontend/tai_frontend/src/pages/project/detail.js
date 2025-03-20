@@ -5,6 +5,7 @@ import { UploadOutlined, EyeOutlined, DeleteOutlined, DownloadOutlined } from '@
 import { message, App } from 'antd';
 import request from '../../utils/request';
 import config from '../../config';
+import { getAllModels } from '../../utils/modelUtils';
 
 // 添加CSS样式
 const styles = {
@@ -45,14 +46,11 @@ const ProjectDetail = () => {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const processModelsData = await request.get('/tasks/process_with_llm/models');
-        setProcessWithLlmModels(processModelsData);
+        const { processModels, imageDescriptionModels, extractModels } = await getAllModels();
         
-        const imageDescriptionModelsData = await request.get('/tasks/convert_to_markdown/image_description_models');
-        setImageDescriptionModels(imageDescriptionModelsData);
-        
-        const extractStructuredDataModelsData = await request.get('/tasks/extract_structured_data/models');
-        setExtractStructuredDataModels(extractStructuredDataModelsData);
+        setProcessWithLlmModels(processModels);
+        setImageDescriptionModels(imageDescriptionModels);
+        setExtractStructuredDataModels(extractModels);
       } catch (error) {
         console.error('获取模型配置失败:', error);
       }

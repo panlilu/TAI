@@ -1,28 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Select, Input, InputNumber, Switch, Collapse } from 'antd';
 import request from '../../../utils/request';
+import { getTaskModels, getImageDescriptionModels } from '../../../utils/modelUtils';
 
-const ArticleTypeConfigForm = ({ form, showBasicSettings = true }) => {
+const ArticleTypeConfigForm = ({ 
+  form, 
+  showBasicSettings = true,
+  externalProcessModels = null,
+  externalExtractModels = null 
+}) => {
   const [processWithLlmModels, setProcessWithLlmModels] = useState([]);
   const [imageDescriptionModels, setImageDescriptionModels] = useState([]);
   const [extractStructuredDataModels, setExtractStructuredDataModels] = useState([]);
+  const [loading, setLoading] = useState(false);
   
   useEffect(() => {
-    fetchModels();
-  }, []); // 仅在组件挂载时获取一次模型数据
+    // 如果外部提供了模型数据，优先使用外部数据
+    if (externalProcessModels) {
+      setProcessWithLlmModels(externalProcessModels);
+    }
+    if (externalExtractModels) {
+      setExtractStructuredDataModels(externalExtractModels);
+    }
+    
+    // 如果外部没有提供数据，则自行获取
+    if (!externalProcessModels || !externalExtractModels) {
+      fetchModels();
+    }
+  }, [externalProcessModels, externalExtractModels]);
 
   const fetchModels = async () => {
     try {
-      const processModelsData = await request.get('/tasks/process_with_llm/models');
-      setProcessWithLlmModels(processModelsData);
+      setLoading(true);
       
-      const imageDescriptionModelsData = await request.get('/tasks/convert_to_markdown/image_description_models');
-      setImageDescriptionModels(imageDescriptionModelsData);
+      // 只获取未提供的模型数据
+      const fetchPromises = [];
       
-      const extractStructuredDataModelsData = await request.get('/tasks/extract_structured_data/models');
-      setExtractStructuredDataModels(extractStructuredDataModelsData);
+      if (!externalProcessModels) {
+        fetchPromises.push(
+          getTaskModels('process_with_llm')
+            .then(data => setProcessWithLlmModels(data))
+        );
+      }
+      
+      // 图片描述模型总是需要获取的
+      fetchPromises.push(
+        getImageDescriptionModels()
+          .then(data => setImageDescriptionModels(data))
+      );
+      
+      if (!externalExtractModels) {
+        fetchPromises.push(
+          getTaskModels('extract_structured_data')
+            .then(data => setExtractStructuredDataModels(data))
+        );
+      }
+      
+      await Promise.all(fetchPromises);
     } catch (error) {
       console.error('获取模型配置失败:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -122,6 +160,7 @@ const ArticleTypeConfigForm = ({ form, showBasicSettings = true }) => {
                           <Select 
                             placeholder="选择模型"
                             disabled={!isEnabled}
+                            loading={loading}
                           >
                             {imageDescriptionModels.map(model => (
                               <Select.Option key={model.id} value={model.id}>
@@ -260,10 +299,7 @@ const ArticleTypeConfigForm = ({ form, showBasicSettings = true }) => {
   ];
 
   return (
-    <Collapse 
-      defaultActiveKey={['basic_settings', 'markdown_conversion', 'process_llm']} 
-      items={collapseItems}
-    />
+    <Collapse defaultActiveKey={['process_llm', 'markdown_conversion', 'extract_structured_data']} items={collapseItems} />
   );
 };
 

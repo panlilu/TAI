@@ -1567,12 +1567,31 @@ async def get_task_models(
     task_type: str,
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
-    """获取特定任务类型可用的模型列表"""
-    model_config = tasks.get_model_config()
-    available_models = model_config.get("task_models", {}).get(task_type, [])
-    if not available_models:
-        return []
-    return available_models
+    """获取特定任务类型可用的模型列表（包括详细信息）
+    
+    支持的任务类型:
+    - process_with_llm: LLM处理任务
+    - extract_structured_data: 结构化数据提取任务
+    - ai_review: AI审阅任务
+    - 其他自定义任务类型
+    
+    对于convert_to_markdown/image_description模型，请使用 /tasks/convert_to_markdown/image_description_models 端点
+    """
+    # 图片描述模型使用单独的API
+    if task_type == "convert_to_markdown" and "image_description" in task_type:
+        raise HTTPException(status_code=400, detail="For image description models, use /tasks/convert_to_markdown/image_description_models endpoint")
+    
+    # 从tasks模块获取可用模型列表
+    available_models = tasks.get_available_models_for_task(task_type)
+    
+    # 获取模型详细信息
+    result = []
+    for model_id in available_models:
+        model_detail = tasks.get_model_details(model_id)
+        if model_detail:
+            result.append(model_detail)
+    
+    return result
 
 @api_app.get("/model-config", tags=["Model Configuration"])
 async def get_model_config(
@@ -1627,38 +1646,12 @@ async def get_user_stats(
         "active_jobs": active_jobs
     }
 
-@api_app.get("/tasks/ai_review/models", tags=["Model Configuration"])
-async def get_ai_review_models(
-    current_user: models.User = Depends(auth.get_current_active_user)
-):
-    """获取AI审阅任务可用的模型列表"""
-    available_models = tasks.get_available_models_for_task("ai_review")
-    result = []
-    for model_id in available_models:
-        model_detail = tasks.get_model_details(model_id)
-        if model_detail:
-            result.append(model_detail)
-    return result
-
 @api_app.get("/tasks/convert_to_markdown/image_description_models", tags=["Model Configuration"])
 async def get_image_description_models(
     current_user: models.User = Depends(auth.get_current_active_user)
 ):
     """获取图片描述任务可用的模型列表"""
     available_models = tasks.MODEL_CONFIG.get("tasks", {}).get("convert_to_markdown", {}).get("available_image_description_models", [])
-    result = []
-    for model_id in available_models:
-        model_detail = tasks.get_model_details(model_id)
-        if model_detail:
-            result.append(model_detail)
-    return result
-
-@api_app.get("/tasks/process_with_llm/models", tags=["Model Configuration"])
-async def get_process_with_llm_models(
-    current_user: models.User = Depends(auth.get_current_active_user)
-):
-    """获取LLM处理任务可用的模型列表"""
-    available_models = tasks.get_available_models_for_task("process_with_llm")
     result = []
     for model_id in available_models:
         model_detail = tasks.get_model_details(model_id)
