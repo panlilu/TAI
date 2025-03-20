@@ -7,3 +7,4 @@ uploads
 dump.rdb
 data
 data/*
+test.db
