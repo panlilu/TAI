@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Table, Button, Input, Form, Upload, Tabs, Space, Switch, Alert, Divider, Collapse, Select, InputNumber } from 'antd';
-import { UploadOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
+import { UploadOutlined, EyeOutlined, DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import { message, App } from 'antd';
 import request from '../../utils/request';
 import config from '../../config';
@@ -630,18 +630,90 @@ const ProjectDetail = () => {
     );
   };
 
+  // 导出项目为CSV
+  const handleExportCSV = async (includeReport = true) => {
+    try {
+      messageApi.loading('正在导出数据...');
+      
+      // 构建下载URL
+      const downloadUrl = `${config.apiBaseURL}/projects/${id}/export-csv?include_report=${includeReport}`;
+      
+      // 获取授权token
+      const token = localStorage.getItem('token');
+      
+      // 使用fetch API来处理文件下载
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`导出失败: ${response.status} ${response.statusText}`);
+      }
+      
+      // 获取文件名
+      const contentDisposition = response.headers.get('content-disposition');
+      let filename = `project_${id}_${new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19)}.csv`;
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?([^"]*)"?/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      // 将响应转换为blob
+      const blob = await response.blob();
+      
+      // 创建下载链接
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 释放URL对象
+      window.URL.revokeObjectURL(url);
+      
+      messageApi.success('导出成功');
+    } catch (error) {
+      console.error('导出CSV失败:', error);
+      messageApi.error(`导出CSV失败: ${error.message}`);
+    }
+  };
+
   const items = [
     {
       key: '1',
       label: '文章管理',
       children: (
         <>
-          <div style={{ marginBottom: '16px' }}>
+          <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between' }}>
             <Upload {...uploadProps}>
               <Button icon={<UploadOutlined />} loading={uploading}>
                 上传文章
               </Button>
             </Upload>
+            <Space>
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={() => handleExportCSV(true)}
+                disabled={articles.length === 0}
+              >
+                导出CSV (含报告)
+              </Button>
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={() => handleExportCSV(false)}
+                disabled={articles.length === 0}
+              >
+                导出CSV (仅结构化数据)
+              </Button>
+            </Space>
           </div>
 
           <Table

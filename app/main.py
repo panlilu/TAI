@@ -16,6 +16,9 @@ import json
 import base64
 import mimetypes
 from pathlib import Path
+import csv
+import io
+import copy
 
 from . import models, schemas, auth, tasks
 from .database import engine, get_db
@@ -625,12 +628,18 @@ async def create_project(
     else:
         project_name = project.name
     
-    # 创建project，从article_type继承config
-    project_config = article_type.config or {}
+    # 创建project，从article_type完整深拷贝config
+    project_config = json.loads(json.dumps(article_type.config or {}))
     
     # 如果项目配置中没有tasks字段，添加默认的任务配置
     if "tasks" not in project_config:
         project_config["tasks"] = {}
+    
+    # 确保extract_structured_data配置被完整保留，即使值为空
+    if "tasks" in project_config and "extract_structured_data" in project_config["tasks"]:
+        extract_config = project_config["tasks"]["extract_structured_data"]
+        if "extraction_prompt" not in extract_config:
+            extract_config["extraction_prompt"] = ""
     
     # 如果提供了新的配置，合并它
     if getattr(project, 'config', None):
@@ -639,16 +648,17 @@ async def create_project(
             for task_type, task_config in project.config["tasks"].items():
                 if task_type not in project_config["tasks"]:
                     project_config["tasks"][task_type] = {}
-                project_config["tasks"][task_type].update(task_config)
+                # 使用深拷贝确保所有字段都被保留
+                project_config["tasks"][task_type].update(copy.deepcopy(task_config))
         
         # 合并其他配置
         for key, value in project.config.items():
             if key != "tasks":
-                project_config[key] = value
+                project_config[key] = copy.deepcopy(value)
     
     db_project = models.Project(
         name=project_name,
-        config=project_config,  # 使用合并后的配置
+        config=project_config,  # 使用完整深拷贝的配置
         auto_approve=project.auto_approve,
         owner_id=current_user.id,
         article_type_id=project.article_type_id
@@ -725,6 +735,91 @@ async def delete_project(
     db.delete(db_project)
     db.commit()
     return {"message": "Project deleted successfully"}
+
+@api_app.get("/projects/{project_id}/export-csv", tags=["Project Management"])
+async def export_project_to_csv(
+    project_id: int,
+    include_report: bool = True,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # 检查项目是否存在且属于当前用户
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this project")
+    
+    # 获取项目下所有文章
+    articles = db.query(models.Article).filter(models.Article.project_id == project_id).all()
+    
+    # 准备CSV内容
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # 遍历文章，获取活动的AI审阅报告
+    rows = []
+    headers = ["article_name"]
+    
+    if include_report:
+        headers.append("report")
+    
+    # 先扫描一遍，确定所有可能的structured_data字段，构建完整的表头
+    structured_fields = set()
+    for article in articles:
+        if article.active_ai_review_report_id is not None:
+            # 获取文章的活动AI审阅报告
+            ai_review = db.query(models.AIReviewReport).filter(
+                models.AIReviewReport.id == article.active_ai_review_report_id
+            ).first()
+            
+            if ai_review and ai_review.structured_data:
+                # 将一级字段名称添加到表头集合中
+                for field in ai_review.structured_data.keys():
+                    structured_fields.add(field)
+    
+    # 扩展表头，包含所有structured_data的一级字段
+    headers.extend(sorted(structured_fields))
+    
+    # 写入表头
+    writer.writerow(headers)
+    
+    # 写入数据行
+    for article in articles:
+        row = [article.name]
+        structured_data = {}
+        
+        if article.active_ai_review_report_id is not None:
+            # 获取文章的活动AI审阅报告
+            ai_review = db.query(models.AIReviewReport).filter(
+                models.AIReviewReport.id == article.active_ai_review_report_id
+            ).first()
+            
+            if ai_review:
+                if include_report:
+                    row.append(ai_review.source_data)
+                if ai_review.structured_data:
+                    structured_data = ai_review.structured_data
+        else:
+            if include_report:
+                row.append("")
+        
+        # 添加structured_data的各字段值
+        for field in headers[2:] if include_report else headers[1:]:
+            row.append(structured_data.get(field, ""))
+        
+        writer.writerow(row)
+    
+    # 准备响应
+    output.seek(0)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"project_{project_id}_{timestamp}.csv"
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 # Job相关API
 @api_app.post("/jobs", response_model=schemas.Job, tags=["Job Management"])

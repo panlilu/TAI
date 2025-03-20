@@ -23,6 +23,18 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response) => {
+    // 检查响应类型
+    const contentType = response.headers['content-type'];
+    // 如果是二进制数据（如文件下载），直接返回响应数据
+    if (contentType && (
+      contentType.includes('application/octet-stream') || 
+      contentType.includes('application/vnd.ms-excel') ||
+      contentType.includes('text/csv') ||
+      contentType.includes('application/zip')
+    )) {
+      return response.data;
+    }
+    // 对于JSON等数据，返回响应主体
     return response.data;
   },
   (error) => {

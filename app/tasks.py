@@ -876,6 +876,18 @@ def process_upload_task(task_id: int, file_path: str, project_id: int):
                     article_id=db_article.id
                 )
                 db.add(llm_task)
+                
+                # 创建结构化数据提取任务
+                extract_task = JobTask(
+                    job_id=review_job.id,
+                    task_type=JobTaskType.EXTRACT_STRUCTURED_DATA,
+                    status=JobStatus.PENDING,
+                    progress=0,
+                    logs="",
+                    article_id=db_article.id
+                )
+                db.add(extract_task)
+                
                 db.commit()
                 
                 # 调度任务
@@ -1023,6 +1035,24 @@ def extract_structured_data_task(task_id: int, article_id: int):
         
         # 从配置中获取提取提示词
         extraction_prompt = task_config.get('extraction_prompt', "")
+        
+        # 如果提取提示词为空，使用默认的提示词
+        if not extraction_prompt:
+            extraction_prompt = """请从以下审阅报告中提取结构化数据，以YAML格式返回。
+若报告中包含评价等级，请提取；若包含最终评分，请提取；若包含其他关键量化指标，也请一并提取。
+
+使用以下YAML格式：
+
+```yaml
+final_score: 分数值
+grade: 评价等级
+# 其他可能的量化指标
+```
+"""
+            task.logs += "【信息】使用默认的结构化数据提取提示词\n"
+        else:
+            task.logs += "【信息】使用配置中的结构化数据提取提示词\n"
+        db.commit()
 
         try:
             # 从任务配置中获取模型
@@ -1047,20 +1077,22 @@ def extract_structured_data_task(task_id: int, article_id: int):
             db.commit()
                 
             # 使用AI模型提取结构化数据
-            prompt = f"{extraction_prompt}\n\n{review_content}"
-            
-            task.logs += "【Debug】PROMPT: {prompt}\n"
+            messages = [
+                    {"role": "system", "content": f"你是一个数据提取助手，擅长从文本中提取结构化数据。请根据给定的格式提取数据，并以YAML格式返回。在后面用户会给出报告的内容。\n{extraction_prompt}"},
+                    {"role": "user", "content": review_content}
+            ]
+
+            task.logs += f"【Debug】Messages: f{messages}\n"
             db.commit()
 
             response = completion(
                 model=model,
-                messages=[
-                    {"role": "system", "content": "你是一个数据提取助手，擅长从文本中提取结构化数据。请根据给定的格式提取数据，并以YAML格式返回。"},
-                    {"role": "user", "content": prompt}
-                ],
+                messages=messages,
                 temperature=task_config.get('temperature', 0.7),
                 max_tokens=task_config.get('max_tokens', 4000)
             )
+            
+        
             
             yaml_content = response.choices[0].message.content
             
