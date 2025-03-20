@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, computed_field, field_serializer, model_serializer
+from pydantic import BaseModel, computed_field, field_serializer, model_serializer, ConfigDict
 from typing import Optional, Literal, Dict, Any, List
 from enum import Enum
 
@@ -40,9 +40,7 @@ class User(UserBase):
     role: UserRole
     is_active: bool
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = ConfigDict(from_attributes=True)
 
 class Token(BaseModel):
     access_token: str
@@ -64,9 +62,7 @@ class ArticleType(ArticleTypeBase):
     id: int
     owner_id: int | None
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = ConfigDict(from_attributes=True)
 
 class ArticleTypeUpdate(BaseModel):
     name: Optional[str] = None
@@ -97,9 +93,7 @@ class Article(ArticleBase):
     json_result: Dict = {}
     project_id: int | None = None
     
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = ConfigDict(from_attributes=True)
 
     @field_serializer('created_at')
     def serialize_datetime(self, dt: datetime) -> str:
@@ -133,9 +127,7 @@ class AIReviewReport(AIReviewReportBase):
     status: str = "pending"
     structured_data: Optional[Dict[str, Any]] = None
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = ConfigDict(from_attributes=True)
 
     @field_serializer('created_at')
     def serialize_datetime(self, dt: datetime) -> str:
@@ -163,9 +155,7 @@ class Project(ProjectBase):
     owner_id: int
     article_type_id: int
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = ConfigDict(from_attributes=True)
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
@@ -192,9 +182,7 @@ class JobTask(JobTaskBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = ConfigDict(from_attributes=True)
 
     @field_serializer('created_at', 'updated_at')
     def serialize_datetime(self, dt: datetime) -> str:
@@ -227,9 +215,7 @@ class Job(JobBase):
     updated_at: Optional[datetime] = None
     tasks: List[JobTask] = []
 
-    model_config = {
-        "from_attributes": True
-    }
+    model_config = ConfigDict(from_attributes=True)
 
     @model_serializer
     def serialize_model(self) -> dict:
