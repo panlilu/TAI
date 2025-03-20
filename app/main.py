@@ -410,7 +410,7 @@ async def extract_article_structured_data(
             models.AIReviewReport.article_id == article_id
         ).order_by(models.AIReviewReport.created_at.desc()).first()
     
-    if not ai_review or not ai_review.review_content:
+    if not ai_review or not ai_review.source_data:
         raise HTTPException(status_code=400, detail="Article doesn't have an AI review report")
     
     # 创建一个新的Job

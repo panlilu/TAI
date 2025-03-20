@@ -40,19 +40,8 @@ extraction_prompt = '''请从以下审阅报告中提取结构化数据，以YAM
 使用以下YAML格式：
 
 ```yaml
-summary: 简短摘要
-structure_score: 7
-completeness_score: 8
-language_score: 9
-professionalism_score: 7
-format_score: 8
-overall_score: 8
-issues:
-  - 第一个问题
-  - 第二个问题
-suggestions:
-  - 第一个建议
-  - 第二个建议
+final_score: 80
+grade: 优秀
 ```
 
 '''

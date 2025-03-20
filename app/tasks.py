@@ -1021,37 +1021,8 @@ def extract_structured_data_task(task_id: int, article_id: int):
         # 获取任务特定的配置
         task_config = get_task_config('extract_structured_data', project.config)
         
-        # 从配置中获取提取提示词，如果没有则使用默认提示词
-        extraction_prompt = task_config.get('extraction_prompt', """请从以下审阅报告中提取结构化数据，以YAML格式返回：
-
-1. 摘要
-2. 结构评分 (1-10)
-3. 内容完整性评分 (1-10)
-4. 语言表达评分 (1-10)
-5. 专业性评分 (1-10)
-6. 格式规范评分 (1-10)
-7. 总体评分 (1-10)
-8. 问题清单 (列表)
-9. 改进建议 (列表)
-
-使用以下YAML格式：
-
-```yaml
-summary: 简短摘要
-structure_score: 7
-completeness_score: 8
-language_score: 9
-professionalism_score: 7
-format_score: 8
-overall_score: 8
-issues:
-  - 第一个问题
-  - 第二个问题
-suggestions:
-  - 第一个建议
-  - 第二个建议
-```
-""")
+        # 从配置中获取提取提示词
+        extraction_prompt = task_config.get('extraction_prompt', "")
 
         try:
             # 从任务配置中获取模型
@@ -1076,8 +1047,11 @@ suggestions:
             db.commit()
                 
             # 使用AI模型提取结构化数据
-            prompt = f"{extraction_prompt}\n\n审阅报告:\n{review_content}"
+            prompt = f"{extraction_prompt}\n\n{review_content}"
             
+            task.logs += "【Debug】PROMPT: {prompt}\n"
+            db.commit()
+
             response = completion(
                 model=model,
                 messages=[

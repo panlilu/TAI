@@ -175,6 +175,8 @@ const ArticleViewer = () => {
 
   const handleConvertToMarkdown = async () => {
     try {
+      // 清除之前的Markdown内容
+      setMarkdownContent(null);
       await request.post(`/jobs`, {
         project_id: parseInt(projectId),
         name: `转换文章 #${articleId} 为Markdown`,
@@ -193,6 +195,8 @@ const ArticleViewer = () => {
 
   const handleAIProcess = async () => {
     try {
+      // 清除之前的AI审阅内容
+      setAiReview(null);
       setIsAiProcessing(true);
       await request.post('/jobs', {
         project_id: parseInt(projectId),
@@ -223,6 +227,8 @@ const ArticleViewer = () => {
   
   const handleExtractStructuredData = async () => {
     try {
+      // 清除之前的结构化数据
+      setStructuredData(null);
       setIsStructuredDataProcessing(true);
       setStructuredDataNotFound(false);
       await request.post(`/articles/${articleId}/extract-structured-data`);
@@ -254,14 +260,21 @@ const ArticleViewer = () => {
   };
 
   const handleExecuteAction = () => {
+    // 根据所选操作清除之前的结果
     switch (selectedAction) {
       case '转换为Markdown':
+        // 清除之前的Markdown内容
+        setMarkdownContent(null);
         handleConvertToMarkdown();
         break;
       case 'AI审阅':
+        // 清除之前的AI审阅内容
+        setAiReview(null);
         handleAIProcess();
         break;
       case '提取结构化数据':
+        // 清除之前的结构化数据
+        setStructuredData(null);
         handleExtractStructuredData();
         break;
       default:
