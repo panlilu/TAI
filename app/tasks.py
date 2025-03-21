@@ -1092,7 +1092,6 @@ grade: 评价等级
                     {"role": "user", "content": review_content}
             ]
 
-            task.logs += f"【Debug】Messages: f{messages}\n"
             db.commit()
 
             response = completion(
