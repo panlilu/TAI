@@ -724,7 +724,6 @@ async def update_project(
     if project.name is not None:
         db_project.name = project.name
     if project.config is not None:
-        # 直接覆盖整个配置，不再合并
         db_project.config = project.config
     if project.auto_approve is not None:
         db_project.auto_approve = project.auto_approve
