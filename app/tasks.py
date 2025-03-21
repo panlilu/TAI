@@ -626,15 +626,6 @@ def process_with_llm_task(task_id: int, article_id: int):
         
         # 构建评审提示词
         system_prompt = task_config.get('prompt', """请对以下文档内容进行专业审阅：""")
-
-#         # 使用配置中的prompt字段，如果存在的话
-#         prompt_template = task_config.get('prompt', """请对以下文档内容进行专业审阅：
-
-# {text}
-# """)
-
-        # # 将markdown_text插入到提示词中
-        # user_prompt = prompt_template.replace("{text}", markdown_text)
         
         try:
             # 调用AI模型生成审阅报告
