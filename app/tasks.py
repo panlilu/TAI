@@ -629,6 +629,13 @@ def process_with_llm_task(task_id: int, article_id: int):
         
         try:
             # 调用AI模型生成审阅报告
+            ai_review_content = ""  # 初始化审阅内容
+            chunks = []  # 存储所有的响应块
+            
+            task.logs += "【处理】开始流式调用大语言模型...\n"
+            db.commit()
+            
+            # 使用流式API
             response = completion(
                 model=model,
                 messages=[
@@ -636,13 +643,32 @@ def process_with_llm_task(task_id: int, article_id: int):
                     {"role": "user", "content": markdown_text}
                 ],
                 temperature=task_config.get('temperature', 0.7),
-                max_tokens=task_config.get('max_tokens', 4000)
+                max_tokens=task_config.get('max_tokens', 4000),
+                stream=True
             )
             
-            ai_review_content = response.choices[0].message.content
+            # 处理流式响应
+            for chunk in response:
+                # 将块添加到集合中
+                chunks.append(chunk)
+                
+                # 提取当前块的内容
+                content = ""
+                if hasattr(chunk.choices[0], "delta") and hasattr(chunk.choices[0].delta, "content"):
+                    content = chunk.choices[0].delta.content or ""
+                
+                # 累积内容
+                if content:
+                    ai_review_content += content
+                    # 更新数据库和日志
+                    ai_review.review_content = ai_review_content
+                    ai_review.source_data = ai_review_content
+                    task.logs = task.logs + f"【更新】收到内容: {len(content)}字符\n"
+                    # 只在收到较长内容时提交，减少数据库压力
+                    if len(content) > 10:
+                        db.commit()
             
-            task.logs += "【信息】AI模型响应完成，保存审阅报告...\n"
-            task.progress = 80
+            # 最终提交
             db.commit()
             
             # 检查任务状态
@@ -651,7 +677,7 @@ def process_with_llm_task(task_id: int, article_id: int):
                 db.commit()
                 return
                 
-            # 更新AI审阅报告内容
+            # 确保最终状态是正确的
             ai_review.review_content = ai_review_content
             ai_review.source_data = ai_review_content
             # 更新AI审阅报告状态为已完成
@@ -1066,7 +1092,12 @@ grade: 评价等级
                 max_tokens=task_config.get('max_tokens', 4000)
             )
             
-        
+            # 最终提交
+            db.commit()
+            
+            task.logs += "【信息】AI模型响应完成，保存审阅报告...\n"
+            task.progress = 80
+            db.commit()
             
             yaml_content = response.choices[0].message.content
             
