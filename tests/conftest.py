@@ -27,12 +27,11 @@ engine = create_engine(TEST_DATABASE_URL)
 # 创建会话
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# 设置事件循环策略
 @pytest.fixture(scope="session")
-def event_loop():
-    """创建一个会话范围的事件循环"""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+def event_loop_policy():
+    """返回事件循环策略"""
+    return asyncio.get_event_loop_policy()
 
 @pytest.fixture(scope="function")
 def db():

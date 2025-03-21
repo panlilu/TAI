@@ -75,6 +75,7 @@ class TestAuthFunctions:
         assert delta > timedelta(minutes=10)
 
     @patch("app.auth.jwt.decode")
+    @pytest.mark.asyncio
     async def test_get_current_user_valid_token(self, mock_decode):
         """测试有效令牌获取当前用户"""
         # 模拟JWT解码返回有效载荷
@@ -94,6 +95,7 @@ class TestAuthFunctions:
         mock_decode.assert_called_once()
 
     @patch("app.auth.jwt.decode")
+    @pytest.mark.asyncio
     async def test_get_current_user_invalid_token(self, mock_decode):
         """测试无效令牌抛出异常"""
         # 模拟JWT解码抛出异常
@@ -110,6 +112,7 @@ class TestAuthFunctions:
         assert exc_info.value.detail == "Could not validate credentials"
 
     @patch("app.auth.jwt.decode")
+    @pytest.mark.asyncio
     async def test_get_current_user_missing_username(self, mock_decode):
         """测试令牌中缺少用户名抛出异常"""
         # 模拟JWT解码返回无效载荷（缺少sub字段）
@@ -126,6 +129,7 @@ class TestAuthFunctions:
         assert exc_info.value.detail == "Could not validate credentials"
 
     @patch("app.auth.jwt.decode")
+    @pytest.mark.asyncio
     async def test_get_current_user_user_not_found(self, mock_decode):
         """测试用户不存在抛出异常"""
         # 模拟JWT解码返回有效载荷
@@ -142,6 +146,7 @@ class TestAuthFunctions:
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
         assert exc_info.value.detail == "Could not validate credentials"
 
+    @pytest.mark.asyncio
     async def test_get_current_active_user_active(self):
         """测试当前用户处于活跃状态"""
         # 模拟活跃用户
@@ -154,6 +159,7 @@ class TestAuthFunctions:
         # 验证结果
         assert user == mock_user
 
+    @pytest.mark.asyncio
     async def test_get_current_active_user_inactive(self):
         """测试当前用户处于非活跃状态抛出异常"""
         # 模拟非活跃用户

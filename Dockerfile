@@ -10,15 +10,15 @@ RUN cd frontend && pnpm run build
 FROM python:3.11-slim
 WORKDIR /app
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev \
+# 安装系统依赖和Redis客户端
+RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev redis-server \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制Python依赖清单
 COPY requirements.txt ./
 
 # 安装Python依赖
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt redis
 
 # 复制后端代码
 COPY app ./app
@@ -31,8 +31,9 @@ RUN mkdir -p /app/data
 # 从前端构建阶段复制产物
 COPY --from=frontend-builder /app/frontend/build ./frontend/tai_frontend/build
 
-# 创建启动脚本
+# 修改启动脚本以包含Redis服务
 RUN echo '#!/bin/bash\n\
+redis-server --daemonize yes \n\
 uvicorn app.main:app --host 0.0.0.0 --port 8000 & \n\
 python worker.py & \n\
 wait' > /app/start.sh && chmod +x /app/start.sh

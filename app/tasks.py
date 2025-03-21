@@ -49,7 +49,12 @@ MODEL_CONFIG = load_model_config()
 # 获取任务可用的模型列表
 def get_available_models_for_task(task_type):
     """获取特定任务类型可用的模型列表"""
-    # 修复：从正确的路径获取模型列表
+    # 首先检查旧格式(task_models结构)
+    task_models = MODEL_CONFIG.get("task_models", {})
+    if task_type in task_models:
+        return task_models.get(task_type, [])
+    
+    # 如果不存在旧格式，则使用新格式(tasks结构)
     available_models = MODEL_CONFIG.get("tasks", {}).get(task_type, {}).get("available_models", [])
     return available_models
 
