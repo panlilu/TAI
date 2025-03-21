@@ -53,15 +53,23 @@ const ProjectList = () => {
 
   // 删除项目
   const handleDelete = async (id) => {
-    try {
-      await request(`/projects/${id}`, {
-        method: 'DELETE',
-      });
-      message.success('删除项目成功');
-      fetchProjects();
-    } catch (error) {
-      message.error('删除项目失败');
-    }
+    Modal.confirm({
+      title: '确认删除',
+      content: '确定要删除此项目吗？删除后无法恢复。',
+      okText: '确认',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await request(`/projects/${id}`, {
+            method: 'DELETE',
+          });
+          message.success('删除项目成功');
+          fetchProjects();
+        } catch (error) {
+          message.error('删除项目失败');
+        }
+      }
+    });
   };
 
   const columns = [

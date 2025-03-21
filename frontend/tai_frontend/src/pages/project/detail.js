@@ -201,36 +201,7 @@ const ProjectDetail = () => {
 
   // 更新项目设置
   const handleUpdateSettings = async (values) => {
-    try {
-      // 详细打印表单的所有字段值
-      console.log('表单字段详细值:');
-      console.log('基本信息:', {
-        name: values.name,
-        auto_approve: values.auto_approve
-      });
-      console.log('LLM处理配置:', {
-        process_model: values.process_model,
-        process_temperature: values.process_temperature,
-        process_max_tokens: values.process_max_tokens,
-        process_top_p: values.process_top_p,
-        process_prompt: values.process_prompt
-      });
-      console.log('Markdown转换配置:', {
-        markdown_conversion_type: values.markdown_conversion_type,
-        enable_image_description: values.enable_image_description,
-        image_description_model: values.image_description_model
-      });
-      console.log('结构化数据提取配置:', {
-        extract_structured_data_model: values.extract_structured_data_model,
-        extract_structured_data_temperature: values.extract_structured_data_temperature,
-        extract_structured_data_max_tokens: values.extract_structured_data_max_tokens,
-        extract_structured_data_top_p: values.extract_structured_data_top_p,
-        extract_structured_data_extraction_prompt: values.extract_structured_data_extraction_prompt
-      });
-      console.log('审阅标准:', {
-        review_criteria: values.review_criteria
-      });
-      
+    try {      
       // 创建一个完整的config对象，确保所有字段都有有效值
       const processWithLlm = {
         model: values.process_model || '',
@@ -276,15 +247,6 @@ const ProjectDetail = () => {
         }
       };
       
-      // 添加可选字段
-      if (values.review_criteria !== undefined && values.review_criteria !== null) {
-        config.review_criteria = values.review_criteria;
-      }
-      
-      // 打印提交的数据，用于调试
-      console.log('提交的表单数据:', values);
-      console.log('提交的config数据:', config);
-
       const formData = {
         name: values.name,
         config: config,
@@ -519,7 +481,7 @@ const ProjectDetail = () => {
     ];
     
     return (
-      <Card title="项目设定" bordered={false}>        
+      <Card bordered={false}>        
         <Form
           form={settingsForm}
           layout="vertical"
