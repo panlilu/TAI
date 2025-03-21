@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, Enu
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import JSONB, JSON
+import uuid
 from .database import Base
 from .schemas import UserRole, JobStatus, JobTaskType
 
@@ -97,6 +98,7 @@ class Job(Base):
     __tablename__ = "jobs"
     
     id = Column(Integer, primary_key=True, index=True)
+    uuid = Column(String, unique=True, index=True, default=lambda: str(uuid.uuid4()))
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     name = Column(String, nullable=True)  # 任务名称
     status = Column(SQLAlchemyEnum(JobStatus), nullable=False)

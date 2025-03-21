@@ -210,6 +210,7 @@ class JobCreate(BaseModel):
 
 class Job(JobBase):
     id: int
+    uuid: str
     project_id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -221,6 +222,7 @@ class Job(JobBase):
     def serialize_model(self) -> dict:
         return {
             "id": self.id,
+            "uuid": self.uuid,
             "project_id": self.project_id,
             "name": self.name,
             "status": self.status,

@@ -748,9 +748,16 @@ def process_upload_task(task_id: int, file_path: str, project_id: int):
             
         task.logs += f"【信息】项目名称: {project.name}\n"
         db.commit()
+        
+        # 获取job信息，用于获取uuid
+        job = db.query(Job).filter(Job.id == task.job_id).first()
+        if not job:
+            error_msg = f"错误：找不到任务ID {task.job_id}"
+            task.logs += f"【错误】{error_msg}\n"
+            raise Exception(error_msg)
             
         # 使用与上传相同的目录结构
-        extract_dir = f"data/uploads/{project.owner_id}/{task.job_id}"
+        extract_dir = f"data/uploads/{project.owner_id}/{job.uuid}"
         os.makedirs(extract_dir, exist_ok=True)
         
         task.logs += f"【信息】创建提取目录: {extract_dir}\n"
