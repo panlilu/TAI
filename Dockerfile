@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制后端代码
 COPY app ./app
 COPY run.py ./
+COPY worker.py ./
 
 # 创建上传目录
 RUN mkdir -p /app/data
@@ -30,8 +31,14 @@ RUN mkdir -p /app/data
 # 从前端构建阶段复制产物
 COPY --from=frontend-builder /app/frontend/build ./frontend/tai_frontend/build
 
+# 创建启动脚本
+RUN echo '#!/bin/bash\n\
+uvicorn app.main:app --host 0.0.0.0 --port 8000 & \n\
+python worker.py & \n\
+wait' > /app/start.sh && chmod +x /app/start.sh
+
 # 暴露端口
 EXPOSE 8000
 
 # 启动命令
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/start.sh"]

@@ -625,16 +625,16 @@ def process_with_llm_task(task_id: int, article_id: int):
         db.commit()
         
         # 构建评审提示词
-        system_prompt = """你是一位专业的文档审阅助手，需要对文档内容进行全面审阅并提供详细报告。"""
+        system_prompt = task_config.get('prompt', """请对以下文档内容进行专业审阅：""")
 
-        # 使用配置中的prompt字段，如果存在的话
-        prompt_template = task_config.get('prompt', """请对以下文档内容进行专业审阅：
+#         # 使用配置中的prompt字段，如果存在的话
+#         prompt_template = task_config.get('prompt', """请对以下文档内容进行专业审阅：
 
-{text}
-""")
+# {text}
+# """)
 
-        # 将markdown_text插入到提示词中
-        user_prompt = prompt_template.replace("{text}", markdown_text)
+        # # 将markdown_text插入到提示词中
+        # user_prompt = prompt_template.replace("{text}", markdown_text)
         
         try:
             # 调用AI模型生成审阅报告
@@ -642,7 +642,7 @@ def process_with_llm_task(task_id: int, article_id: int):
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
+                    {"role": "user", "content": markdown_text}
                 ],
                 temperature=task_config.get('temperature', 0.7),
                 max_tokens=task_config.get('max_tokens', 4000)
