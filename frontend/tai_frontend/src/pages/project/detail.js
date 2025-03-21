@@ -7,25 +7,6 @@ import request from '../../utils/request';
 import config from '../../config';
 import { getAllModels } from '../../utils/modelUtils';
 
-// 添加CSS样式
-const styles = {
-  inheritedConfig: {
-    marginBottom: '24px',
-    padding: '16px',
-    backgroundColor: '#f8f8f8',
-    borderRadius: '4px',
-  },
-  configItem: {
-    marginBottom: '16px',
-  },
-  preWrap: {
-    whiteSpace: 'pre-wrap',
-    backgroundColor: '#fff',
-    padding: '8px',
-    borderRadius: '4px',
-    border: '1px solid #d9d9d9',
-  }
-};
 
 const ProjectDetail = () => {
   const { id } = useParams();
@@ -319,57 +300,6 @@ const ProjectDetail = () => {
     }
   };
 
-  // 渲染继承的配置
-  const renderInheritedConfig = () => {
-    if (!articleType) return null;
-    
-    return (
-      <div style={styles.inheritedConfig} className="inherited-config">
-        <h4>继承自文章类型的配置</h4>
-        <Divider />
-        
-        {articleType.config?.tasks?.process_with_llm?.prompt && (
-          <div style={styles.configItem} className="config-item">
-            <h5>LLM审阅提示词</h5>
-            <div style={styles.preWrap} className="pre-wrap">{articleType.config.tasks.process_with_llm.prompt}</div>
-          </div>
-        )}
-        {articleType?.config?.tasks?.process_with_llm?.prompt && (
-          <Alert 
-            message="提示词已从文章类型继承" 
-            description="如果设置了新的提示词，将覆盖从文章类型继承的提示词。" 
-            type="info" 
-            showIcon 
-            style={{ marginBottom: '20px' }}
-          />
-        )}
-        
-        {articleType.config?.tasks?.extract_structured_data?.extraction_prompt && (
-          <div style={styles.configItem} className="config-item">
-            <h5>结构化数据提取提示词</h5>
-            <div style={styles.preWrap} className="pre-wrap">{articleType.config.tasks.extract_structured_data.extraction_prompt}</div>
-          </div>
-        )}
-        {articleType?.config?.tasks?.extract_structured_data?.extraction_prompt && (
-          <Alert 
-            message="结构化数据提取提示词已从文章类型继承" 
-            description="如果设置了新的提取提示词，将覆盖从文章类型继承的提取提示词。" 
-            type="info" 
-            showIcon 
-            style={{ marginBottom: '20px' }}
-          />
-        )}
-        
-        {articleType.config?.tasks?.convert_to_markdown?.conversion_type && (
-          <div style={styles.configItem} className="config-item">
-            <h5>Markdown转换类型</h5>
-            <div style={styles.preWrap}>{articleType.config.tasks.convert_to_markdown.conversion_type === 'simple' ? '简单模式' : '高级模式'}</div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
   // 渲染项目设定
   const renderProjectSettings = () => {
     if (!project) {
@@ -589,9 +519,7 @@ const ProjectDetail = () => {
     ];
     
     return (
-      <Card title="项目设定" bordered={false}>
-        {renderInheritedConfig()}
-        
+      <Card title="项目设定" bordered={false}>        
         <Form
           form={settingsForm}
           layout="vertical"
