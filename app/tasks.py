@@ -84,29 +84,6 @@ def is_allowed_file(filename: str) -> bool:
     ext = os.path.splitext(filename)[1].lower()
     return ext in ALLOWED_EXTENSIONS or ext in ALLOWED_IMAGE_EXTENSIONS
 
-def extract_text_from_docx(file_path: str) -> str:
-    """从docx文件中提取文本"""
-    doc = Document(file_path)
-    return "\n".join([paragraph.text for paragraph in doc.paragraphs])
-
-def extract_text_from_pdf(file_path: str) -> str:
-    """从PDF文件中提取文本"""
-    reader = PdfReader(file_path)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() + "\n"
-    return text
-
-def extract_text_from_image(file_path: str) -> str:
-    """从图片中提取文本"""
-    try:
-        image = Image.open(file_path)
-        text = pytesseract.image_to_string(image)
-        return text
-    except Exception as e:
-        return f"Error: Failed to extract text from image: {str(e)}"
-
-
 def update_job_status(db: Session, job_id: int):
     """根据所有子任务的状态更新Job的状态和进度"""
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -176,8 +153,11 @@ def execute_task(task_id: int):
             convert_to_markdown_task(task.id, task.article_id)
         elif task.task_type == JobTaskType.PROCESS_WITH_LLM:
             process_with_llm_task(task.id, task.article_id)
+        # 注释掉对未实现函数的引用
         elif task.task_type == JobTaskType.PROCESS_AI_REVIEW:
-            process_ai_review_task(task.id, task.article_id)
+            # process_ai_review_task函数未实现
+            # process_ai_review_task(task.id, task.article_id)
+            raise ValueError(f"暂未实现的任务类型: {task.task_type}")
         elif task.task_type == JobTaskType.PROCESS_UPLOAD:
             if not task.params or 'file_path' not in task.params or 'project_id' not in task.params:
                 raise ValueError(f"任务缺少必要参数，需要 file_path 和 project_id")
@@ -950,11 +930,6 @@ def get_model_details(model_id):
             return model
     return {"id": model_id, "name": model_id, "description": ""}
 
-# 获取所有可用模型
-def get_all_available_models():
-    """获取所有配置的模型列表"""
-    return MODEL_CONFIG.get("models", [])
-
 def extract_structured_data_task(task_id: int, article_id: int):
     """从AI审阅的结果中提取结构化数据"""
     db = SessionLocal()
@@ -1154,30 +1129,6 @@ grade: 评价等级
             task.status = JobStatus.FAILED
             task.logs += f"【错误】处理失败: {str(e)}\n"
             db.commit()
-        raise
-    finally:
-        db.close()
-
-def extract_structured_data(article_id: int, job_id: int):
-    """创建提取结构化数据任务"""
-    db = SessionLocal()
-    try:
-        # 创建任务
-        job_task = JobTask(
-            job_id=job_id,
-            task_type=JobTaskType.EXTRACT_STRUCTURED_DATA,
-            status=JobStatus.PENDING,
-            article_id=article_id
-        )
-        db.add(job_task)
-        db.commit()
-        
-        # 立即执行任务
-        extract_structured_data_task(job_task.id, article_id)
-        
-    except Exception as e:
-        import traceback
-        print(f"Error creating extract_structured_data task: {str(e)}\n{traceback.format_exc()}")
         raise
     finally:
         db.close()
