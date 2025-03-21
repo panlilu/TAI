@@ -86,26 +86,61 @@ class EventService {
   connectToAIReview(aiReviewId, onMessage, onError) {
     if (this.aiReviewEventSource) {
       this.aiReviewEventSource.close();
+      this.aiReviewEventSource = null;
     }
 
     const token = getToken();
-    if (!token) return;
+    if (!token) {
+      if (onError) onError(new Error('No authentication token available'));
+      return;
+    }
 
-    this.aiReviewEventSource = new EventSourcePolyfill(
-      `${config.apiBaseURL}/events_ai_review/${aiReviewId}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`
+    try {
+      const url = `${config.apiBaseURL}/events_ai_review/${aiReviewId}`;
+      console.log(`正在连接到AI审阅事件源: ${url}`);
+      
+      this.aiReviewEventSource = new EventSourcePolyfill(
+        url,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          heartbeatTimeout: 60000 // 增加心跳超时时间到60秒
         }
-      }
-    );
+      );
 
-    this.aiReviewEventSource.onmessage = onMessage;
-    this.aiReviewEventSource.onerror = (error) => {
-      console.error('AI Review SSE Error:', error);
-      this.aiReviewEventSource.close();
+      this.aiReviewEventSource.onmessage = onMessage;
+      
+      this.aiReviewEventSource.onerror = (error) => {
+        console.error('AI Review SSE Error:', error);
+        
+        // 如果连接已关闭，尝试重新连接
+        if (this.aiReviewEventSource && this.aiReviewEventSource.readyState === 2) {
+          console.log('AI审阅连接已关闭，尝试重新连接...');
+          
+          // 关闭现有连接
+          this.aiReviewEventSource.close();
+          this.aiReviewEventSource = null;
+          
+          // 5秒后尝试重新连接
+          setTimeout(() => {
+            if (!this.aiReviewEventSource) {
+              this.connectToAIReview(aiReviewId, onMessage, onError);
+            }
+          }, 5000);
+        }
+        
+        if (onError) onError(error);
+      };
+      
+      // 添加打开连接的处理函数
+      this.aiReviewEventSource.onopen = () => {
+        console.log('AI审阅事件源连接已建立');
+      };
+    } catch (error) {
+      console.error('创建AI审阅事件源连接失败:', error);
       if (onError) onError(error);
-    };
+    }
   }
 
   disconnectAIReview() {

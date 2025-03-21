@@ -26,24 +26,71 @@ const ArticleViewer = () => {
   const connectToAIReviewEvents = (aiReviewId) => {
     setIsAiProcessing(true);
     
+    // 先断开现有连接
+    eventService.disconnectAIReview();
+    
     eventService.connectToAIReview(
       aiReviewId,
       (event) => {
-        const data = JSON.parse(event.data);
-        
-        if (data.type === 'content') {
-          setAiReview(prev => ({
-            ...prev,
-            source_data: (prev?.source_data || '') + data.content
-          }));
+        try {
+          const data = JSON.parse(event.data);
+          console.log('收到AI审阅事件:', data);
+          
+          if (data.type === 'content') {
+            setAiReview(prev => {
+              // 如果是首次接收数据，或者之前的数据为空
+              if (!prev || !prev.source_data) {
+                return {
+                  id: aiReviewId,
+                  source_data: data.content,
+                  status: 'processing'
+                };
+              }
+              // 否则追加内容
+              return {
+                ...prev,
+                source_data: data.content // 直接使用最新内容，而非追加
+              };
+            });
 
-          if (data.is_final) {
+            if (data.is_final) {
+              setIsAiProcessing(false);
+              eventService.disconnectAIReview();
+            }
+          } else if (data.type === 'status') {
+            console.log(`AI审阅状态更新: ${data.status}`);
+            setAiReview(prev => ({
+              ...prev,
+              status: data.status
+            }));
+            
+            // 只有状态为completed或failed才停止处理
+            if (data.status === 'completed' || data.status === 'failed') {
+              console.log('AI审阅已完成或失败，停止处理');
+              setIsAiProcessing(false);
+            } else if (data.status === 'ready') {
+              // 如果状态为ready，表示文件已转换为Markdown但AI审阅尚未完成
+              console.log('文件已转换为Markdown，等待AI审阅');
+              // 不改变isAiProcessing，保持处理状态
+            } else if (data.status === 'processing') {
+              // 如果状态为processing，表示AI正在处理文档
+              console.log('AI正在处理文档内容');
+              setIsAiProcessing(true);
+            }
+          } else if (data.type === 'error') {
+            console.error('AI Review error:', data.message);
+            message.error(`AI审阅错误: ${data.message}`);
             setIsAiProcessing(false);
             eventService.disconnectAIReview();
           }
+        } catch (error) {
+          console.error('处理AI审阅事件失败:', error, event);
+          setIsAiProcessing(false);
         }
       },
-      () => {
+      (error) => {
+        console.error('AI Review WebSocket error:', error);
+        message.error('AI审阅连接出错，请刷新页面重试');
         setIsAiProcessing(false);
       }
     );
@@ -125,14 +172,18 @@ const ArticleViewer = () => {
           
           setAiReview(activeReview);
           // 根据AI审阅状态设置isAiProcessing标志
-          setIsAiProcessing(activeReview.status !== 'completed');
+          const isCompleted = activeReview.status === 'completed' || activeReview.status === 'failed';
+          setIsAiProcessing(!isCompleted);
           
           if (activeReview.processed_attachment_text) {
             setMarkdownContent(activeReview.processed_attachment_text);
           }
 
-          // 如果存在AI审阅报告且正在处理中，启动实时更新
-          if (activeReview.status !== 'completed') {
+          // 如果存在AI审阅报告且正在处理中（状态为pending、ready或processing），启动实时更新
+          if (!isCompleted) {
+            // 先断开之前可能存在的连接
+            eventService.disconnectAIReview();
+            console.log(`开始监听AI审阅更新，ID: ${activeReview.id}, 状态: ${activeReview.status}`);
             connectToAIReviewEvents(activeReview.id);
           }
         }
@@ -198,7 +249,9 @@ const ArticleViewer = () => {
       // 清除之前的AI审阅内容
       setAiReview(null);
       setIsAiProcessing(true);
-      await request.post('/jobs', {
+      
+      // 先发送创建任务请求
+      const jobResponse = await request.post('/jobs', {
         project_id: parseInt(projectId),
         name: `AI审阅文章 #${articleId}`,
         tasks: [
@@ -208,20 +261,34 @@ const ArticleViewer = () => {
           }
         ]
       });
+      
       message.success('已创建AI处理任务，请稍后在AI审阅报告标签页查看进度');
       
-      // 创建新的 AI 审阅报告记录并启动实时更新
+      // 等待一秒，确保后端有足够时间创建 AI 审阅报告
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 获取最新的 AI 审阅报告
       const aiReviewResponse = await request(`/ai-reviews?article_id=${articleId}`);
+      
       if (aiReviewResponse && aiReviewResponse.length > 0) {
         const latestReview = aiReviewResponse[0];
         setAiReview(latestReview);
-        // 确保根据最新状态设置isAiProcessing
-        setIsAiProcessing(latestReview.status !== 'completed');
-        connectToAIReviewEvents(latestReview.id);
+        
+        // 确保根据最新状态设置isAiProcessing标志
+        const isCompleted = latestReview.status === 'completed' || latestReview.status === 'failed';
+        setIsAiProcessing(!isCompleted);
+        
+        // 如果状态不是已完成，确保连接到事件流
+        if (!isCompleted) {
+          // 确保关闭之前的连接并建立新连接
+          eventService.disconnectAIReview();
+          connectToAIReviewEvents(latestReview.id);
+        }
       }
     } catch (error) {
       setIsAiProcessing(false);
-      message.error('创建AI处理任务失败');
+      message.error('创建AI处理任务失败: ' + (error.message || '未知错误'));
+      console.error('AI处理任务失败:', error);
     }
   };
   

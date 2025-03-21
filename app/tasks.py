@@ -473,8 +473,8 @@ def convert_to_markdown_task(task_id: int, article_id: int):
                 task.logs += "【信息】更新现有的AI审阅报告...\n"
                 
             ai_review.processed_attachment_text = markdown_text
-            # 更新AI审阅报告状态为已完成
-            ai_review.status = "completed"
+            # 更新AI审阅报告状态为ready，表示已准备好供LLM处理
+            ai_review.status = "ready"
             
             # 更新文章的active_ai_review_report_id
             article.active_ai_review_report_id = ai_review.id
@@ -628,6 +628,10 @@ def process_with_llm_task(task_id: int, article_id: int):
         system_prompt = task_config.get('prompt', """请对以下文档内容进行专业审阅：""")
         
         try:
+            # 更新AI审阅报告状态为处理中
+            ai_review.status = "processing"
+            db.commit()
+            
             # 调用AI模型生成审阅报告
             ai_review_content = ""  # 初始化审阅内容
             chunks = []  # 存储所有的响应块
@@ -635,6 +639,10 @@ def process_with_llm_task(task_id: int, article_id: int):
             task.logs += "【处理】开始流式调用大语言模型...\n"
             db.commit()
             
+            # 设置累计字符阈值
+            accumulated_chars = 0
+            commit_threshold = 20  # 每累计20个字符提交一次
+
             # 使用流式API
             response = completion(
                 model=model,
@@ -660,13 +668,15 @@ def process_with_llm_task(task_id: int, article_id: int):
                 # 累积内容
                 if content:
                     ai_review_content += content
+                    accumulated_chars += len(content)
                     # 更新数据库和日志
                     ai_review.review_content = ai_review_content
                     ai_review.source_data = ai_review_content
                     task.logs = task.logs + f"【更新】收到内容: {len(content)}字符\n"
-                    # 只在收到较长内容时提交，减少数据库压力
-                    if len(content) > 10:
+                    # 当累计字符数达到阈值时提交
+                    if accumulated_chars >= commit_threshold:
                         db.commit()
+                        accumulated_chars = 0  # 重置累计字符数
             
             # 最终提交
             db.commit()

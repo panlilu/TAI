@@ -19,10 +19,14 @@ from pathlib import Path
 import csv
 import io
 import copy
+import logging
 
 from . import models, schemas, auth, tasks
 from .database import engine, get_db
 from .schemas import UserRole
+
+# 设置日志记录器
+logger = logging.getLogger(__name__)
 
 redis_conn = Redis()
 task_queue = Queue(connection=redis_conn)
@@ -1459,6 +1463,9 @@ async def ai_review_events(
     async def event_generator():
         try:
             while True:
+                # 刷新数据库会话以避免过期数据
+                db.expire_all()
+                
                 # 重新查询数据库以获取最新数据
                 db_review = db.query(models.AIReviewReport).filter(models.AIReviewReport.id == ai_review_id).first()
                 
@@ -1474,6 +1481,16 @@ async def ai_review_events(
                 if db_review.status == "completed":
                     yield f"data: {json.dumps({'type': 'content', 'content': db_review.source_data or '', 'is_final': True})}\n\n"
                     break
+                # 如果是ready状态，表示文档已转换为Markdown等待LLM处理
+                elif db_review.status == "ready" and db_review.processed_attachment_text:
+                    # 发送状态但不终止连接，因为之后可能会收到LLM处理的结果
+                    yield f"data: {json.dumps({'type': 'content', 'content': '文档已准备好，等待AI处理...', 'is_final': False})}\n\n"
+                # 如果是processing状态，表示LLM正在处理，发送当前的部分内容
+                elif db_review.status == "processing":
+                    if db_review.source_data:
+                        yield f"data: {json.dumps({'type': 'content', 'content': db_review.source_data, 'is_final': False})}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'type': 'content', 'content': 'AI正在处理文档内容...', 'is_final': False})}\n\n"
                 
                 await asyncio.sleep(2)
         except asyncio.CancelledError:
@@ -1508,6 +1525,9 @@ async def structured_data_events(
     async def event_generator():
         try:
             while True:
+                # 刷新数据库会话以避免过期数据
+                db.expire_all()
+                
                 # 重新查询数据库以获取最新数据
                 db_review = db.query(models.AIReviewReport).filter(models.AIReviewReport.id == report_id).first()
                 
