@@ -8,3 +8,4 @@ dump.rdb
 data
 data/*
 test.db
+test_docs/*
