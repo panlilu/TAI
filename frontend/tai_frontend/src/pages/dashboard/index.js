@@ -48,7 +48,6 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard-container" style={{ padding: isMobile ? '8px' : '16px' }}>
-      <Title level={2} style={{ marginBottom: 24, fontSize: isMobile ? '24px' : '28px' }}>仪表盘</Title>
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={8} lg={8} xl={8}>
           <Card hoverable style={{ height: '100%' }}>
