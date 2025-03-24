@@ -1,0 +1,59 @@
+.dashboard-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  transition: all 0.3s ease;
+}
+
+.ant-card {
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09);
+  border-radius: 8px;
+}
+
+.ant-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.ant-statistic-title {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.ant-statistic-content {
+  font-size: 24px;
+}
+
+/* 移动端样式 */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 8px !important;
+  }
+  
+  .ant-card {
+    margin-bottom: 12px;
+  }
+  
+  .ant-statistic-title {
+    font-size: 14px;
+  }
+  
+  .ant-statistic-content {
+    font-size: 20px;
+  }
+}
+
+/* 平板样式 */
+@media (min-width: 769px) and (max-width: 992px) {
+  .dashboard-container {
+    padding: 12px !important;
+  }
+}
+
+/* 触摸屏设备的特殊处理 */
+@media (hover: none) {
+  .ant-card:hover {
+    transform: none;
+  }
+} 

@@ -1,11 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, Spin } from 'antd';
+import { Card, Row, Col, Statistic, Spin, Typography } from 'antd';
 import { FileTextOutlined, ProjectOutlined, AppstoreOutlined, ScheduleOutlined, LoadingOutlined, FileSyncOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
+import './style.css';
+
+const { Title } = Typography;
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -32,57 +47,57 @@ const Dashboard = () => {
   }
 
   return (
-    <div>
-      <h2 style={{ marginBottom: 24 }}>仪表盘</h2>
-      <Row gutter={16}>
+    <div className="dashboard-container" style={{ padding: isMobile ? '8px' : '16px' }}>
+      <Title level={2} style={{ marginBottom: 24, fontSize: isMobile ? '24px' : '28px' }}>仪表盘</Title>
+      <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-          <Card>
+          <Card hoverable style={{ height: '100%' }}>
             <Statistic
               title="我的文章"
               value={stats?.article_count || 0}
-              prefix={<FileTextOutlined />}
+              prefix={<FileTextOutlined style={{ color: '#3f8600' }} />}
               valueStyle={{ color: '#3f8600' }}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-          <Card>
+          <Card hoverable style={{ height: '100%' }}>
             <Statistic
               title="我的项目"
               value={stats?.project_count || 0}
-              prefix={<ProjectOutlined />}
+              prefix={<ProjectOutlined style={{ color: '#1890ff' }} />}
               valueStyle={{ color: '#1890ff' }}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-          <Card>
+          <Card hoverable style={{ height: '100%' }}>
             <Statistic
               title="可用文章类型"
               value={stats?.article_type_count || 0}
-              prefix={<AppstoreOutlined />}
+              prefix={<AppstoreOutlined style={{ color: '#722ed1' }} />}
               valueStyle={{ color: '#722ed1' }}
             />
           </Card>
         </Col>
       </Row>
-      <Row gutter={16} style={{ marginTop: 16 }}>
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} sm={12} md={12} lg={12} xl={12}>
-          <Card>
+          <Card hoverable style={{ height: '100%' }}>
             <Statistic
               title="任务总数"
               value={stats?.total_jobs || 0}
-              prefix={<ScheduleOutlined />}
+              prefix={<ScheduleOutlined style={{ color: '#cf1322' }} />}
               valueStyle={{ color: '#cf1322' }}
             />
           </Card>
         </Col>
         <Col xs={24} sm={12} md={12} lg={12} xl={12}>
-          <Card>
+          <Card hoverable style={{ height: '100%' }}>
             <Statistic
               title="进行中任务"
               value={stats?.active_jobs || 0}
-              prefix={<FileSyncOutlined />}
+              prefix={<FileSyncOutlined style={{ color: '#faad14' }} />}
               valueStyle={{ color: '#faad14' }}
             />
           </Card>
