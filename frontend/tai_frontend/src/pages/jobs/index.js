@@ -236,13 +236,14 @@ const Jobs = () => {
   };
 
   const renderTasksTable = (tasks) => {
-    const taskColumns = [
-      // {
+          // {
       //   title: 'ID',
       //   dataIndex: 'id',
       //   key: 'id',
       //   width: 60
       // },
+    const taskColumns = [
+
       {
         title: '任务类型',
         dataIndex: 'task_type',
@@ -353,7 +354,7 @@ const Jobs = () => {
     {
       title: '',
       key: 'expand',
-      width: 50,
+      width: 30,
       render: (_, record) => (
         <Button
           type="text"
@@ -372,7 +373,16 @@ const Jobs = () => {
       title: '任务名称',
       dataIndex: 'name',
       key: 'name',
-      render: (name, record) => name || `任务 #${record.id}`
+      render: (name, record) => {
+        const displayName = name || `任务 #${record.id}`;
+        const truncatedName = displayName.length > 40 ? displayName.substring(0, 40) + '...' : displayName;
+        
+        return (
+          <Tooltip title={displayName}>
+            <span>{truncatedName}</span>
+          </Tooltip>
+        );
+      }
     },
     {
       title: '状态',
@@ -493,7 +503,8 @@ const Jobs = () => {
         expandable={{
           expandedRowRender: (record) => renderTasksTable(record.tasks || []),
           expandRowByClick: false,
-          expandIcon: () => null
+          expandIcon: () => null,
+          expandIconColumnIndex: -1
         }}
       />
       
