@@ -67,6 +67,7 @@ erDiagram
     
     Job {
         int id PK
+        string uuid
         int project_id FK
         string name
         enum status
