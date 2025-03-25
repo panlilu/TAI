@@ -109,8 +109,7 @@ class AdvancedMarkdownConverter:
             config: 配置字典，包含API密钥等
         """
         self.config = config or {}
-        # 优先从环境变量获取API密钥，如果环境变量中没有，则从配置中获取
-        self.api_key = os.environ.get("MISTRAL_API_KEY") or self.config.get("mistral_api_key")
+        self.api_key = os.environ.get("MISTRAL_API_KEY")
         self.image_model = self.config.get("image_description_model", "lm_studio/qwen2.5-vl-7b-instruct")
         self.enable_image_description = self.config.get("enable_image_description", True)
         # 添加日志记录功能

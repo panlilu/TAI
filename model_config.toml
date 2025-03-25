@@ -38,10 +38,6 @@ name = "Gemma3-12b（本地运行）"
 description = "Gemma3 12B 是一个多模态模型，具有图片理解能力同时也有很强的对话能力"
 
 
-
-
-
-
 # 任务配置
 [tasks]
 

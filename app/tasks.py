@@ -158,11 +158,6 @@ def execute_task(task_id: int):
             convert_to_markdown_task(task.id, task.article_id)
         elif task.task_type == JobTaskType.PROCESS_WITH_LLM:
             process_with_llm_task(task.id, task.article_id)
-        # 注释掉对未实现函数的引用
-        elif task.task_type == JobTaskType.PROCESS_AI_REVIEW:
-            # process_ai_review_task函数未实现
-            # process_ai_review_task(task.id, task.article_id)
-            raise ValueError(f"暂未实现的任务类型: {task.task_type}")
         elif task.task_type == JobTaskType.PROCESS_UPLOAD:
             if not task.params or 'file_path' not in task.params or 'project_id' not in task.params:
                 raise ValueError(f"任务缺少必要参数，需要 file_path 和 project_id")
