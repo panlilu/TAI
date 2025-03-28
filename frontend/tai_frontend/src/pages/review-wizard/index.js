@@ -115,9 +115,13 @@ const ReviewWizard = () => {
             process_temperature: project.config?.tasks?.process_with_llm?.temperature || 0.7,
             process_max_tokens: project.config?.tasks?.process_with_llm?.max_tokens || 2000,
             process_top_p: project.config?.tasks?.process_with_llm?.top_p || 0.95,
-            markdown_conversion_type: project.config?.tasks?.convert_to_markdown?.conversion_type || project.config?.tasks?.convert_to_markdown?.type || 'simple',
-            enable_image_description: project.config?.tasks?.convert_to_markdown?.image_description?.enabled || false,
-            image_description_model: project.config?.tasks?.convert_to_markdown?.image_description?.model || '',
+            tasks: {
+              convert_to_markdown: {
+                conversion_type: project.config?.tasks?.convert_to_markdown?.conversion_type || 'simple',
+                enable_image_description: project.config?.tasks?.convert_to_markdown?.enable_image_description || false,
+                image_description_model: project.config?.tasks?.convert_to_markdown?.image_description_model || ''
+              }
+            },
             extract_structured_data_model: project.config?.tasks?.extract_structured_data?.model || '',
             extract_structured_data_temperature: project.config?.tasks?.extract_structured_data?.temperature || 0.7,
             extract_structured_data_max_tokens: project.config?.tasks?.extract_structured_data?.max_tokens || 2000,
@@ -254,9 +258,7 @@ const ReviewWizard = () => {
           process_temperature, 
           process_max_tokens, 
           process_top_p,
-          markdown_conversion_type,
-          enable_image_description,
-          image_description_model,
+          tasks,
           extract_structured_data_model,
           extract_structured_data_temperature,
           extract_structured_data_max_tokens,
@@ -276,11 +278,9 @@ const ReviewWizard = () => {
                 top_p: process_top_p
               },
               convert_to_markdown: {
-                conversion_type: markdown_conversion_type,
-                image_description: {
-                  enabled: enable_image_description,
-                  model: image_description_model
-                }
+                conversion_type: tasks?.convert_to_markdown?.conversion_type || 'simple',
+                enable_image_description: tasks?.convert_to_markdown?.enable_image_description,
+                image_description_model: tasks?.convert_to_markdown?.image_description_model || ''
               },
               extract_structured_data: {
                 model: extract_structured_data_model,

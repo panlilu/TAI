@@ -37,9 +37,13 @@ const ArticleType = () => {
       name: record.name,
       is_public: record.is_public,
       process_prompt: record.config?.tasks?.process_with_llm?.prompt || '',
-      markdown_conversion_type: record.config?.tasks?.convert_to_markdown?.conversion_type || 'simple',
-      enable_image_description: record.config?.tasks?.convert_to_markdown?.enable_image_description !== false,
-      image_description_model: record.config?.tasks?.convert_to_markdown?.image_description_model || 'lm_studio/qwen2.5-vl-7b-instruct',
+      tasks: {
+        convert_to_markdown: {
+          conversion_type: record.config?.tasks?.convert_to_markdown?.conversion_type || 'simple',
+          enable_image_description: record.config?.tasks?.convert_to_markdown?.enable_image_description !== false,
+          image_description_model: record.config?.tasks?.convert_to_markdown?.image_description_model || ''
+        }
+      },
       process_model: record.config?.tasks?.process_with_llm?.model || '',
       process_temperature: record.config?.tasks?.process_with_llm?.temperature || 0.7,
       process_max_tokens: record.config?.tasks?.process_with_llm?.max_tokens || 2000,
@@ -74,9 +78,9 @@ const ArticleType = () => {
           format_prompt: values.format_prompt || '',
           tasks: {
             convert_to_markdown: {
-              conversion_type: values.markdown_conversion_type || 'simple',
-              enable_image_description: values.enable_image_description,
-              image_description_model: values.image_description_model || 'lm_studio/qwen2.5-vl-7b-instruct',
+              conversion_type: values.tasks?.convert_to_markdown?.conversion_type || 'simple',
+              enable_image_description: values.tasks?.convert_to_markdown?.enable_image_description,
+              image_description_model: values.tasks?.convert_to_markdown?.image_description_model || '',
             },
             process_with_llm: {
               model: values.process_model || '',
@@ -186,7 +190,13 @@ const ArticleType = () => {
           layout="vertical"
           initialValues={{
             is_public: false,
-            markdown_conversion_type: 'simple',
+            tasks: {
+              convert_to_markdown: {
+                conversion_type: 'simple',
+                enable_image_description: false,
+                image_description_model: ''
+              }
+            },
             process_temperature: 0.7,
             process_max_tokens: 2000,
             process_top_p: 0.95,

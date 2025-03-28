@@ -94,7 +94,7 @@ const ArticleTypeConfigForm = ({
       children: (
         <>
           <Form.Item
-            name="markdown_conversion_type"
+            name={["tasks", "convert_to_markdown", "conversion_type"]}
             label="Markdown转换类型"
             help="选择文档转换为Markdown的方式，高级模式需要配置Mistral API Key"
           >
@@ -103,7 +103,13 @@ const ArticleTypeConfigForm = ({
               onChange={(value) => {
                 // 如果切换到简单模式，自动禁用图片描述
                 if (value !== 'advanced' && form) {
-                  form.setFieldsValue({ enable_image_description: false });
+                  form.setFieldsValue({ 
+                    tasks: { 
+                      convert_to_markdown: { 
+                        enable_image_description: false 
+                      } 
+                    } 
+                  });
                 }
               }}
             >
@@ -113,18 +119,20 @@ const ArticleTypeConfigForm = ({
           </Form.Item>
           
           <Form.Item
-            shouldUpdate={(prevValues, currentValues) => 
-              prevValues.markdown_conversion_type !== currentValues.markdown_conversion_type
-            }
+            shouldUpdate={(prevValues, currentValues) => {
+              const prevType = prevValues?.tasks?.convert_to_markdown?.conversion_type;
+              const currentType = currentValues?.tasks?.convert_to_markdown?.conversion_type;
+              return prevType !== currentType;
+            }}
           >
             {({ getFieldValue }) => {
-              const conversionType = getFieldValue('markdown_conversion_type');
+              const conversionType = getFieldValue(['tasks', 'convert_to_markdown', 'conversion_type']);
               const showImageDescriptionOptions = conversionType === 'advanced';
               
               return showImageDescriptionOptions ? (
                 <>
                   <Form.Item
-                    name="enable_image_description"
+                    name={["tasks", "convert_to_markdown", "enable_image_description"]}
                     label="启用图片描述"
                     valuePropName="checked"
                     help="启用后会使用AI生成图片描述"
@@ -132,21 +140,29 @@ const ArticleTypeConfigForm = ({
                     <Switch onChange={(checked) => {
                       // 如果禁用了图片描述，清空模型选择
                       if (!checked && form) {
-                        form.setFieldsValue({ image_description_model: '' });
+                        form.setFieldsValue({ 
+                          tasks: { 
+                            convert_to_markdown: { 
+                              image_description_model: '' 
+                            } 
+                          } 
+                        });
                       }
                     }} />
                   </Form.Item>
                   
                   <Form.Item
-                    shouldUpdate={(prevValues, currentValues) => 
-                      prevValues.enable_image_description !== currentValues.enable_image_description
-                    }
+                    shouldUpdate={(prevValues, currentValues) => {
+                      const prevEnabled = prevValues?.tasks?.convert_to_markdown?.enable_image_description;
+                      const currentEnabled = currentValues?.tasks?.convert_to_markdown?.enable_image_description;
+                      return prevEnabled !== currentEnabled;
+                    }}
                   >
                     {({ getFieldValue }) => {
-                      const isEnabled = getFieldValue('enable_image_description');
+                      const isEnabled = getFieldValue(['tasks', 'convert_to_markdown', 'enable_image_description']);
                       return (
                         <Form.Item
-                          name="image_description_model"
+                          name={["tasks", "convert_to_markdown", "image_description_model"]}
                           label="图片描述模型"
                           help="选择用于生成图片描述的模型"
                           rules={[
