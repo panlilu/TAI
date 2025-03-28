@@ -202,41 +202,51 @@ const ProjectDetail = () => {
   // 更新项目设置
   const handleUpdateSettings = async (values) => {
     try {      
+      // 确保从表单中获取所有字段值，无论是否在折叠状态
+      const allFormValues = settingsForm.getFieldsValue(true);
+      
       // 创建一个完整的config对象，确保所有字段都有有效值
       const processWithLlm = {
-        model: values.process_model || '',
-        temperature: parseFloat(values.process_temperature) || 0.7,
-        max_tokens: parseInt(values.process_max_tokens) || 2000,
-        top_p: parseFloat(values.process_top_p) || 0.95,
+        model: values.process_model || allFormValues.process_model || '',
+        temperature: parseFloat(values.process_temperature || allFormValues.process_temperature) || 0.7,
+        max_tokens: parseInt(values.process_max_tokens || allFormValues.process_max_tokens) || 2000,
+        top_p: parseFloat(values.process_top_p || allFormValues.process_top_p) || 0.95,
       };
       
       // 仅当有值时添加prompt字段
-      if (values.process_prompt !== undefined && values.process_prompt !== null) {
-        processWithLlm.prompt = values.process_prompt;
+      if ((values.process_prompt !== undefined && values.process_prompt !== null) || 
+          (allFormValues.process_prompt !== undefined && allFormValues.process_prompt !== null)) {
+        processWithLlm.prompt = values.process_prompt || allFormValues.process_prompt;
       }
       
       const convertToMarkdown = {
-        conversion_type: values.markdown_conversion_type || 'simple',
-        enable_image_description: Boolean(values.enable_image_description),
+        conversion_type: values.markdown_conversion_type || allFormValues.markdown_conversion_type || 'simple',
+        enable_image_description: Boolean(values.enable_image_description || allFormValues.enable_image_description),
       };
       
       // 仅当启用图片描述时添加模型
-      if (values.enable_image_description && values.image_description_model) {
-        convertToMarkdown.image_description_model = values.image_description_model;
+      if ((values.enable_image_description || allFormValues.enable_image_description) && 
+          (values.image_description_model || allFormValues.image_description_model)) {
+        convertToMarkdown.image_description_model = values.image_description_model || allFormValues.image_description_model;
       }
       
       const extractStructuredData = {
-        model: values.extract_structured_data_model || '',
-        temperature: parseFloat(values.extract_structured_data_temperature) || 0.7,
-        max_tokens: parseInt(values.extract_structured_data_max_tokens) || 2000,
-        top_p: parseFloat(values.extract_structured_data_top_p) || 0.95,
+        model: values.extract_structured_data_model || allFormValues.extract_structured_data_model || '',
+        temperature: parseFloat(values.extract_structured_data_temperature || allFormValues.extract_structured_data_temperature) || 0.7,
+        max_tokens: parseInt(values.extract_structured_data_max_tokens || allFormValues.extract_structured_data_max_tokens) || 2000,
+        top_p: parseFloat(values.extract_structured_data_top_p || allFormValues.extract_structured_data_top_p) || 0.95,
       };
       
       // 仅当有值时添加提取提示词字段
-      if (values.extract_structured_data_extraction_prompt !== undefined && 
-          values.extract_structured_data_extraction_prompt !== null) {
-        extractStructuredData.extraction_prompt = values.extract_structured_data_extraction_prompt;
+      if ((values.extract_structured_data_extraction_prompt !== undefined && values.extract_structured_data_extraction_prompt !== null) ||
+          (allFormValues.extract_structured_data_extraction_prompt !== undefined && allFormValues.extract_structured_data_extraction_prompt !== null)) {
+        extractStructuredData.extraction_prompt = values.extract_structured_data_extraction_prompt || allFormValues.extract_structured_data_extraction_prompt;
       }
+      
+      // 调试输出
+      console.log('表单提交的values:', values);
+      console.log('所有表单字段:', allFormValues);
+      console.log('结构化数据提取配置:', extractStructuredData);
       
       // 构建完整的config对象
       const config = {
