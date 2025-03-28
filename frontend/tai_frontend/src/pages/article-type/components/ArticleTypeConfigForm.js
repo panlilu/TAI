@@ -193,6 +193,30 @@ const ArticleTypeConfigForm = ({
                       );
                     }}
                   </Form.Item>
+                  
+                  <Form.Item
+                    shouldUpdate={(prevValues, currentValues) => {
+                      const prevEnabled = prevValues?.tasks?.convert_to_markdown?.enable_image_description;
+                      const currentEnabled = currentValues?.tasks?.convert_to_markdown?.enable_image_description;
+                      return prevEnabled !== currentEnabled;
+                    }}
+                  >
+                    {({ getFieldValue }) => (
+                      <Form.Item
+                        name={["tasks", "convert_to_markdown", "max_images"]}
+                        label="图片描述上限"
+                        help="最多处理的图片数量，超过将被忽略"
+                        initialValue={10}
+                      >
+                        <InputNumber 
+                          min={1} 
+                          disabled={!getFieldValue(['tasks', 'convert_to_markdown', 'enable_image_description'])}
+                          placeholder="默认10张" 
+                          style={{ width: '100%' }} 
+                        />
+                      </Form.Item>
+                    )}
+                  </Form.Item>
                 </>
               ) : null;
             }}

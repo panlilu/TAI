@@ -13,9 +13,10 @@ import time
 import signal
 from timeout_decorator import timeout, TimeoutError
 import threading
+from io import BytesIO
 
 # 全局超时处理设置
-GLOBAL_TIMEOUT = 60  # 全局操作超时时间（秒）
+GLOBAL_TIMEOUT = 1800  # 全局操作超时时间（秒）
 
 # 检测操作系统类型
 IS_MACOS = platform.system() == 'Darwin'
@@ -153,6 +154,7 @@ class AdvancedMarkdownConverter:
         self.api_key = os.environ.get("MISTRAL_API_KEY")
         self.image_model = self.config.get("image_description_model", "lm_studio/qwen2.5-vl-7b-instruct")
         self.enable_image_description = self.config.get("enable_image_description", True)
+        self.max_images = self.config.get("max_images", 20)  # 添加图片数量上限，默认为20
         # 添加日志记录功能
         self.logger = self.config.get("logger", lambda msg: print(msg))
         # 添加临时文件目录列表
@@ -219,8 +221,28 @@ class AdvancedMarkdownConverter:
             for img in page.images:
                 img_data = base64.b64decode(img.image_base64.split(',')[1])
                 img_path = os.path.join(images_dir, f"{img.id}.png")
-                with open(img_path, 'wb') as f:
-                    f.write(img_data)
+                
+                # 压缩图片，限制最大宽度为800px
+                try:
+                    with Image.open(BytesIO(img_data)) as image:
+                        # 检查是否需要压缩
+                        if image.width > 800:
+                            # 计算高度以保持宽高比
+                            ratio = 800.0 / image.width
+                            new_height = int(image.height * ratio)
+                            # 调整图片大小
+                            resized_image = image.resize((800, new_height), Image.LANCZOS)
+                            # 保存压缩后的图片
+                            resized_image.save(img_path)
+                        else:
+                            # 宽度已经小于800px，直接保存
+                            with open(img_path, 'wb') as f:
+                                f.write(img_data)
+                except Exception as e:
+                    self.logger(f"图片压缩失败: {str(e)}，使用原始图片")
+                    # 如果压缩失败，保存原始图片
+                    with open(img_path, 'wb') as f:
+                        f.write(img_data)
                 
                 rel_img_path = f"images/{img.id}.png"
                 page_images[img.id] = rel_img_path
@@ -324,18 +346,30 @@ class AdvancedMarkdownConverter:
         total_images = len(images)
         self.logger(f"开始处理 {total_images} 张图片的描述")
         
+        # 检查是否超过图片上限
+        if total_images > self.max_images:
+            self.logger(f"图片数量 ({total_images}) 超过上限 ({self.max_images})，只处理前 {self.max_images} 张图片")
+            # 获取前max_images个图片ID并创建新的字典
+            image_ids = list(images.keys())[:self.max_images]
+            filtered_images = {img_id: images[img_id] for img_id in image_ids}
+            # 将剩余的图片标记为已跳过
+            for img_id in list(images.keys())[self.max_images:]:
+                descriptions[img_id] = "[图片描述已跳过: 超过处理上限]"
+        else:
+            filtered_images = images
+        
         # 检查是否使用 lm_studio 模型，如果是则添加 base_url 参数
         model_params = {}
         if self.image_model.startswith("lm_studio"):
             model_params["base_url"] = "http://127.0.0.1:1234/v1"
         
-        for idx, (img_id, img_info) in enumerate(images.items(), 1):
+        for idx, (img_id, img_info) in enumerate(filtered_images.items(), 1):
             # 重试机制
             max_retries = 3
             retry_delay = 5
             last_error = None
             
-            self.logger(f"正在处理第 {idx}/{total_images} 张图片 (ID: {img_id})")
+            self.logger(f"正在处理第 {idx}/{min(total_images, self.max_images)} 张图片 (ID: {img_id})")
             img_path = img_info["path"]
             
             # 设置单个图片处理的安全超时，确保即使内部处理函数失败也能继续

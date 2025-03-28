@@ -74,6 +74,7 @@ def seed_database():
                     "convert_to_markdown": {
                         "type": "simple",
                         "enable_image_description": False,
+                        "max_images": 10,
                         "image_description_model": "lm_studio/qwen2.5-vl-7b-instruct"
                     },
                     "process_with_llm": {
