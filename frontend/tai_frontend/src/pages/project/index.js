@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Switch, message } from 'antd';
+import { Table, Button, Modal, Form, Input, Select, Switch, message, App } from 'antd';
 import request from '../../utils/request';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,6 +9,7 @@ const ProjectList = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [form] = Form.useForm();
   const navigate = useNavigate();
+  const { modal, message } = App.useApp();
 
   // 获取项目列表
   const fetchProjects = async () => {
@@ -53,7 +54,7 @@ const ProjectList = () => {
 
   // 删除项目
   const handleDelete = async (id) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: '确定要删除此项目吗？删除后无法恢复。',
       okText: '确认',

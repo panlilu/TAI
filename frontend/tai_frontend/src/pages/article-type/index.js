@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, message, Popconfirm } from 'antd';
+import { Table, Button, Modal, Form, message, Popconfirm, App } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import request from '../../utils/request';
 import ArticleTypeConfigForm from './components/ArticleTypeConfigForm';
@@ -10,6 +10,7 @@ const ArticleType = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [form] = Form.useForm();
   const [editingId, setEditingId] = useState(null);
+  const { message } = App.useApp();
 
   const fetchData = async () => {
     setLoading(true);
