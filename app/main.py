@@ -1,7 +1,7 @@
 from datetime import timedelta
 import os
 from typing import List, Optional, Dict, Any
-from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File, APIRouter
+from fastapi import Depends, FastAPI, HTTPException, status, UploadFile, File, APIRouter, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -662,18 +662,27 @@ async def create_project(
     
     # 如果提供了新的配置，合并它
     if getattr(project, 'config', None):
-        # 合并tasks配置
+        # 先处理顶层配置
+        for key, value in project.config.items():
+            if key != "tasks":
+                if isinstance(value, dict) and isinstance(project_config.get(key), dict):
+                    # 对于字典类型的值，递归合并而不是直接替换
+                    if key not in project_config:
+                        project_config[key] = {}
+                    # 合并嵌套字典
+                    for sub_key, sub_value in value.items():
+                        project_config[key][sub_key] = copy.deepcopy(sub_value)
+                else:
+                    # 对于非字典类型的值，直接替换
+                    project_config[key] = copy.deepcopy(value)
+        
+        # 然后处理嵌套的tasks配置
         if "tasks" in project.config:
             for task_type, task_config in project.config["tasks"].items():
                 if task_type not in project_config["tasks"]:
                     project_config["tasks"][task_type] = {}
                 # 使用深拷贝确保所有字段都被保留
                 project_config["tasks"][task_type].update(copy.deepcopy(task_config))
-        
-        # 合并其他配置
-        for key, value in project.config.items():
-            if key != "tasks":
-                project_config[key] = copy.deepcopy(value)
     
     db_project = models.Project(
         name=project_name,
@@ -895,6 +904,7 @@ async def create_job(
         db.add(db_task)
     
     db.commit()
+    
     
     # 调度任务
     task_queue.enqueue(

@@ -12,7 +12,8 @@ class TestProjectAPI:
             json={
                 "name": "新项目",
                 "auto_approve": True,
-                "article_type_id": test_article_type.id
+                "article_type_id": test_article_type.id,
+                "config": {}  # 添加空的config字段
             },
             headers=user_token_headers
         )
@@ -22,6 +23,44 @@ class TestProjectAPI:
         assert data["name"] == "新项目"
         assert data["auto_approve"] == True
         assert data["article_type_id"] == test_article_type.id
+    
+    def test_create_project_with_config_inheritance(self, client: TestClient, user_token_headers, test_article_type):
+        """测试创建项目时config的继承和覆盖"""
+        # 假设文章类型有一些配置
+        # 首先更新文章类型的配置
+        article_type_config = {"base_setting": "original", "font_size": 12, "extra_field": "value", "secend_layer_setting": {"test1": "test2", "test3": "test4"}, "tasks": {"extract_structured_data": {"temperature": 0.3, "max_tokens": 3000, "top_p": 0.8, "extraction_prompt": "Extract the main points from the text."}}}
+        client.put(
+            f"/article-types/{test_article_type.id}",
+            json={"config": article_type_config},
+            headers=user_token_headers
+        )
+        
+        # 创建项目时提供部分配置，应该继承文章类型的配置并覆盖重复字段
+        project_config = {"font_size": 14, "new_setting": "project_value", "secend_layer_setting": {"test1": "test5", "test6": "test7"}, "tasks": {"extract_structured_data": {"temperature": 0.4, "extraction_prompt": "Extract the main points from the text. And output in json format."}}}
+        response = client.post(
+            "/projects",
+            json={
+                "name": "配置继承测试项目",
+                "article_type_id": test_article_type.id,
+                "config": project_config
+            },
+            headers=user_token_headers
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "配置继承测试项目"
+        assert data["article_type_id"] == test_article_type.id
+        
+        # 验证配置继承和覆盖
+        assert data["config"]["base_setting"] == "original"  # 从文章类型继承
+        assert data["config"]["font_size"] == 14  # 被项目配置覆盖
+        assert data["config"]["tasks"]["extract_structured_data"]["temperature"] == 0.4 # 被项目配置覆盖
+        assert data["config"]["tasks"]["extract_structured_data"]["max_tokens"] == 3000 # 从文章类型继承
+        assert data["config"]["secend_layer_setting"]["test1"] == "test5" # 被项目配置覆盖
+        assert data["config"]["secend_layer_setting"]["test3"] == "test4" # 从文章类型继承
+        assert data["config"]["extra_field"] == "value"  # 从文章类型继承
+        assert data["config"]["new_setting"] == "project_value"  # 项目新增字段
     
     def test_get_projects(self, client: TestClient, user_token_headers, test_project):
         """测试获取项目列表"""
@@ -73,7 +112,8 @@ class TestProjectAPI:
             "/projects",
             json={
                 "name": "要删除的项目",
-                "article_type_id": test_article_type.id
+                "article_type_id": test_article_type.id,
+                "config": {}  # 添加空的config字段
             },
             headers=user_token_headers
         )
@@ -97,4 +137,5 @@ class TestProjectAPI:
         
         assert response.status_code == 200
         assert response.headers["Content-Type"] == "text/csv; charset=utf-8"
-        assert "attachment; filename=" in response.headers["Content-Disposition"] 
+        assert "attachment; filename=" in response.headers["Content-Disposition"]
+    

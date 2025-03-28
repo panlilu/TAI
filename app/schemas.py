@@ -149,6 +149,7 @@ class ProjectCreate(BaseModel):
     name: Optional[str] = None
     auto_approve: bool = True
     article_type_id: int
+    config: Optional[Dict[str, Any]] = None
 
 class Project(ProjectBase):
     id: int
