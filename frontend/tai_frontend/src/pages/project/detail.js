@@ -210,10 +210,10 @@ const ProjectDetail = () => {
         top_p: parseFloat(values.process_top_p) || 0.95,
       };
       
-      // // 仅当有值时添加prompt字段
-      // if (values.process_prompt !== undefined && values.process_prompt !== null) {
-      //   processWithLlm.prompt = values.process_prompt;
-      // }
+      // 仅当有值时添加prompt字段
+      if (values.process_prompt !== undefined && values.process_prompt !== null) {
+        processWithLlm.prompt = values.process_prompt;
+      }
       
       const convertToMarkdown = {
         conversion_type: values.markdown_conversion_type || 'simple',
