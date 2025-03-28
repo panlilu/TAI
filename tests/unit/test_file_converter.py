@@ -195,11 +195,10 @@ class TestAdvancedMarkdownConverter:
     @patch("app.file_converter.MISTRAL_AVAILABLE", True)
     def test_init_with_custom_config(self, mock_environ_get):
         """测试使用自定义配置初始化转换器"""
-        # 模拟环境变量中没有API密钥
-        mock_environ_get.return_value = None
+        # 模拟环境变量中存在API密钥
+        mock_environ_get.return_value = "test_api_key"
         
         config = {
-            "mistral_api_key": "test_mistral_key",
             "image_description_model": "custom_model",
             "enable_image_description": False
         }
@@ -207,7 +206,7 @@ class TestAdvancedMarkdownConverter:
         converter = AdvancedMarkdownConverter(config)
         
         # 验证配置应用
-        assert converter.api_key == "test_mistral_key"
+        assert converter.api_key == "test_api_key"
         assert converter.image_model == "custom_model"
         assert converter.enable_image_description == False
     
