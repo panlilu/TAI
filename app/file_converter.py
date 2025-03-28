@@ -1,4 +1,6 @@
 import os
+import sys
+import platform
 from docx import Document
 from pypdf import PdfReader
 from PIL import Image
@@ -8,7 +10,44 @@ import base64
 import json
 from typing import Dict, List, Tuple, Optional
 import time
+import signal
 from timeout_decorator import timeout, TimeoutError
+import threading
+
+# 全局超时处理设置
+GLOBAL_TIMEOUT = 60  # 全局操作超时时间（秒）
+
+# 检测操作系统类型
+IS_MACOS = platform.system() == 'Darwin'
+
+# 超时处理函数
+def timeout_handler(signum, frame):
+    raise TimeoutError("操作超时")
+
+# 替代超时处理方法（适用于不支持SIGALRM的平台，如Windows和某些macOS版本）
+def with_timeout(timeout_seconds, func, *args, **kwargs):
+    """使用线程实现超时处理"""
+    result = [None]
+    exception = [None]
+    completed = [False]
+    
+    def worker():
+        try:
+            result[0] = func(*args, **kwargs)
+            completed[0] = True
+        except Exception as e:
+            exception[0] = e
+    
+    thread = threading.Thread(target=worker)
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout_seconds)
+    
+    if not completed[0]:
+        raise TimeoutError(f"操作超时（{timeout_seconds}秒）")
+    if exception[0]:
+        raise exception[0]
+    return result[0]
 
 # 尝试导入Mistral相关包
 try:
@@ -201,7 +240,6 @@ class AdvancedMarkdownConverter:
         
         return complete_md_path, all_images
     
-    @timeout(30)  # 30秒超时
     def _generate_single_image_description(self, img_path: str, model_params: Dict) -> str:
         """生成单张图片的描述
         
@@ -212,22 +250,63 @@ class AdvancedMarkdownConverter:
         Returns:
             图片描述文本
         """
+        # 使用自定义超时处理代替装饰器，更加可靠
         with open(img_path, "rb") as img_file:
             base64_image = base64.b64encode(img_file.read()).decode("utf-8")
         
-        response = completion(
-            model=self.image_model,
-            messages=[
-                {"role": "system", "content": "你是一个图像描述助手。描述图像内容，详细且简洁。"},
-                {"role": "user", "content": [
-                    {"type": "text", "text": "请描述这张图片的内容，提供清晰、准确的描述。"},
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
-                ]}
-            ],
-            **model_params
-        )
-        
-        return response.choices[0].message.content
+        # 根据平台选择不同的超时处理方式
+        if IS_MACOS:
+            # macOS可能不支持信号处理或在某些环境中有限制，使用线程超时
+            try:
+                def make_api_call():
+                    response = completion(
+                        model=self.image_model,
+                        messages=[
+                            {"role": "system", "content": "你是一个图像描述助手。描述图像内容，详细且简洁。"},
+                            {"role": "user", "content": [
+                                {"type": "text", "text": "请描述这张图片的内容，提供清晰、准确的描述。"},
+                                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+                            ]}
+                        ],
+                        **model_params
+                    )
+                    return response.choices[0].message.content
+                
+                return with_timeout(30, make_api_call)
+            except Exception as e:
+                raise Exception(f"图片描述API调用失败: {str(e)}")
+        else:
+            # 在支持信号的平台上使用SIGALRM
+            original_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(30)  # 设置30秒超时
+            
+            try:
+                response = completion(
+                    model=self.image_model,
+                    messages=[
+                        {"role": "system", "content": "你是一个图像描述助手。描述图像内容，详细且简洁。"},
+                        {"role": "user", "content": [
+                            {"type": "text", "text": "请描述这张图片的内容，提供清晰、准确的描述。"},
+                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+                        ]}
+                    ],
+                    **model_params
+                )
+                
+                # 成功后取消超时
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, original_handler)
+                
+                return response.choices[0].message.content
+            except Exception as e:
+                # 确保取消超时设置
+                try:
+                    signal.alarm(0)
+                    signal.signal(signal.SIGALRM, original_handler)
+                except:
+                    pass
+                # 显式抛出异常以便被外层捕获
+                raise Exception(f"图片描述API调用失败: {str(e)}")
 
     def generate_image_descriptions(self, images: Dict[str, Dict]) -> Dict[str, str]:
         """生成图片描述
@@ -251,42 +330,50 @@ class AdvancedMarkdownConverter:
             model_params["base_url"] = "http://127.0.0.1:1234/v1"
         
         for idx, (img_id, img_info) in enumerate(images.items(), 1):
+            # 重试机制
+            max_retries = 3
+            retry_delay = 5
+            last_error = None
+            
+            self.logger(f"正在处理第 {idx}/{total_images} 张图片 (ID: {img_id})")
+            img_path = img_info["path"]
+            
+            # 设置单个图片处理的安全超时，确保即使内部处理函数失败也能继续
+            overall_timeout = threading.Timer(60, lambda: self.logger(f"警告：图片 {img_id} 处理超时60秒，强制跳过"))
+            overall_timeout.start()
+            
             try:
-                self.logger(f"正在处理第 {idx}/{total_images} 张图片 (ID: {img_id})")
-                img_path = img_info["path"]
-                
-                # 重试机制
-                max_retries = 3
-                retry_delay = 5
-                last_error = None
-                
                 for retry in range(max_retries):
                     try:
                         self.logger(f"使用模型 {self.image_model} 生成图片描述 (尝试 {retry + 1}/{max_retries})")
                         desc_text = self._generate_single_image_description(img_path, model_params)
                         descriptions[img_id] = desc_text
                         self.logger(f"图片 {img_id} 描述生成完成")
+                        # 成功生成描述，跳出重试循环
                         break
                     except TimeoutError:
                         last_error = "请求超时"
+                        self.logger(f"图片 {img_id} 描述生成超时，{retry_delay}秒后重试")
                         if retry < max_retries - 1:
-                            self.logger(f"图片 {img_id} 描述生成超时，{retry_delay}秒后重试")
                             time.sleep(retry_delay)
                     except Exception as e:
                         last_error = str(e)
+                        self.logger(f"图片 {img_id} 描述生成失败: {last_error}，{retry_delay}秒后重试")
                         if retry < max_retries - 1:
-                            self.logger(f"图片 {img_id} 描述生成失败: {last_error}，{retry_delay}秒后重试")
                             time.sleep(retry_delay)
                 
+                # 如果所有重试都失败，记录最终错误并继续下一张图片
                 if img_id not in descriptions:
                     error_msg = f"在{max_retries}次尝试后仍然失败：{last_error}"
-                    descriptions[img_id] = error_msg
+                    descriptions[img_id] = f"[图片描述失败: {error_msg}]"
                     self.logger(f"图片 {img_id} 描述生成最终失败: {error_msg}")
-                
             except Exception as e:
-                error_msg = f"无法生成描述：{str(e)}"
-                descriptions[img_id] = error_msg
-                self.logger(f"图片 {img_id} 描述生成失败: {error_msg}")
+                self.logger(f"图片 {img_id} 处理过程中发生严重错误: {str(e)}，跳过此图片")
+                descriptions[img_id] = f"[图片处理错误: {str(e)}]"
+            finally:
+                # 取消超时定时器，确保不会触发
+                if overall_timeout.is_alive():
+                    overall_timeout.cancel()
         
         self.logger(f"所有 {total_images} 张图片描述处理完成")
         return descriptions
@@ -371,47 +458,116 @@ class AdvancedMarkdownConverter:
         output_dir = os.path.join(os.path.dirname(pdf_path), "ocr_results")
         self.logger(f"创建输出目录: {output_dir}")
         
-        # 上传并处理PDF
-        self.logger(f"开始上传PDF文件: {pdf_file.name}")
-        uploaded_file = client.files.upload(
-            file={
-                "file_name": pdf_file.stem,
-                "content": pdf_file.read_bytes(),
-            },
-            purpose="ocr",
-        )
-        
-        # 获取签名URL并处理OCR
-        self.logger("获取签名URL并开始OCR处理")
-        signed_url = client.files.get_signed_url(file_id=uploaded_file.id, expiry=1)
-        
-        self.logger("调用Mistral OCR API处理PDF")
-        pdf_response = client.ocr.process(
-            document=DocumentURLChunk(document_url=signed_url.url), 
-            model="mistral-ocr-latest", 
-            include_image_base64=True
-        )
+        # 上传并处理PDF，设置超时保护
+        try:
+            # 根据平台选择不同的超时处理方式
+            if IS_MACOS:
+                # macOS使用线程超时
+                def process_pdf():
+                    # 上传PDF文件
+                    self.logger(f"开始上传PDF文件: {pdf_file.name}")
+                    uploaded_file = client.files.upload(
+                        file={
+                            "file_name": pdf_file.stem,
+                            "content": pdf_file.read_bytes(),
+                        },
+                        purpose="ocr",
+                    )
+                    
+                    # 获取签名URL并处理OCR
+                    self.logger("获取签名URL并开始OCR处理")
+                    signed_url = client.files.get_signed_url(file_id=uploaded_file.id, expiry=1)
+                    
+                    self.logger("调用Mistral OCR API处理PDF")
+                    return client.ocr.process(
+                        document=DocumentURLChunk(document_url=signed_url.url), 
+                        model="mistral-ocr-latest", 
+                        include_image_base64=True
+                    )
+                
+                try:
+                    pdf_response = with_timeout(GLOBAL_TIMEOUT, process_pdf)
+                except TimeoutError as e:
+                    error_msg = f"PDF处理超时: {str(e)}"
+                    self.logger(f"【错误】{error_msg}")
+                    raise Exception(error_msg)
+            else:
+                # 非macOS使用信号超时
+                # 注册信号处理器用于超时处理
+                original_handler = signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(GLOBAL_TIMEOUT)  # 设置超时时间
+                
+                self.logger(f"开始上传PDF文件: {pdf_file.name}")
+                uploaded_file = client.files.upload(
+                    file={
+                        "file_name": pdf_file.stem,
+                        "content": pdf_file.read_bytes(),
+                    },
+                    purpose="ocr",
+                )
+                
+                # 获取签名URL并处理OCR
+                self.logger("获取签名URL并开始OCR处理")
+                signed_url = client.files.get_signed_url(file_id=uploaded_file.id, expiry=1)
+                
+                self.logger("调用Mistral OCR API处理PDF")
+                pdf_response = client.ocr.process(
+                    document=DocumentURLChunk(document_url=signed_url.url), 
+                    model="mistral-ocr-latest", 
+                    include_image_base64=True
+                )
+                
+                # 取消超时设置
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, original_handler)
+        except Exception as e:
+            # 确保取消超时设置（在非macOS平台）
+            if not IS_MACOS:
+                try:
+                    signal.alarm(0)
+                    signal.signal(signal.SIGALRM, original_handler)
+                except:
+                    pass
+                
+            error_msg = f"PDF处理失败: {str(e)}"
+            self.logger(f"【错误】{error_msg}")
+            raise Exception(error_msg)
         
         # 保存OCR结果
         self.logger("OCR处理完成，开始保存结果")
-        complete_md_path, images = self.save_ocr_results(pdf_response, output_dir)
+        try:
+            complete_md_path, images = self.save_ocr_results(pdf_response, output_dir)
+        except Exception as e:
+            error_msg = f"保存OCR结果失败: {str(e)}"
+            self.logger(f"【错误】{error_msg}")
+            raise Exception(error_msg)
         
         # 如果启用了图片描述，则生成图片描述
         final_content = ""
-        if self.enable_image_description and IMAGE_DESCRIPTION_AVAILABLE:
-            self.logger("开始生成图片描述")
-            image_descriptions = self.generate_image_descriptions(images)
-            
-            self.logger("创建图片描述Markdown文件")
-            desc_md_path = self.create_image_description_markdown(image_descriptions, output_dir)
-            
-            self.logger("合并OCR结果和图片描述")
-            final_content = self.create_final_markdown(complete_md_path, desc_md_path, output_dir)
-        else:
-            # 如果未启用图片描述，直接返回OCR结果
-            self.logger("图片描述功能未启用，直接使用OCR结果")
-            with open(complete_md_path, 'r', encoding='utf-8') as f:
-                final_content = f.read()
+        try:
+            if self.enable_image_description and IMAGE_DESCRIPTION_AVAILABLE:
+                self.logger("开始生成图片描述")
+                image_descriptions = self.generate_image_descriptions(images)
+                
+                self.logger("创建图片描述Markdown文件")
+                desc_md_path = self.create_image_description_markdown(image_descriptions, output_dir)
+                
+                self.logger("合并OCR结果和图片描述")
+                final_content = self.create_final_markdown(complete_md_path, desc_md_path, output_dir)
+            else:
+                # 如果未启用图片描述，直接返回OCR结果
+                self.logger("图片描述功能未启用，直接使用OCR结果")
+                with open(complete_md_path, 'r', encoding='utf-8') as f:
+                    final_content = f.read()
+        except Exception as e:
+            error_msg = f"处理图片描述失败: {str(e)}"
+            self.logger(f"【警告】{error_msg}，使用原始OCR结果")
+            # 如果图片描述处理失败，仍然返回OCR结果
+            try:
+                with open(complete_md_path, 'r', encoding='utf-8') as f:
+                    final_content = f.read()
+            except:
+                raise Exception("无法读取OCR结果")
         
         self.logger("高级PDF转换完成")
         return final_content
