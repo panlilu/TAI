@@ -6,7 +6,8 @@ const ArticleTypeConfigForm = ({
   form, 
   showBasicSettings = true,
   externalProcessModels = null,
-  externalExtractModels = null 
+  externalExtractModels = null,
+  externalImageModels = null
 }) => {
   const [processWithLlmModels, setProcessWithLlmModels] = useState([]);
   const [imageDescriptionModels, setImageDescriptionModels] = useState([]);
@@ -27,11 +28,13 @@ const ArticleTypeConfigForm = ({
         );
       }
       
-      // 图片描述模型总是需要获取的
-      fetchPromises.push(
-        getImageDescriptionModels()
-          .then(data => setImageDescriptionModels(data))
-      );
+      // 只有当外部没有提供图片描述模型时才获取
+      if (!externalImageModels) {
+        fetchPromises.push(
+          getImageDescriptionModels()
+            .then(data => setImageDescriptionModels(data))
+        );
+      }
       
       if (!externalExtractModels) {
         fetchPromises.push(
@@ -46,7 +49,7 @@ const ArticleTypeConfigForm = ({
     } finally {
       setLoading(false);
     }
-  }, [externalProcessModels, externalExtractModels]);
+  }, [externalProcessModels, externalExtractModels, externalImageModels]);
 
   useEffect(() => {
     // 如果外部提供了模型数据，优先使用外部数据
@@ -56,12 +59,15 @@ const ArticleTypeConfigForm = ({
     if (externalExtractModels) {
       setExtractStructuredDataModels(externalExtractModels);
     }
+    if (externalImageModels) {
+      setImageDescriptionModels(externalImageModels);
+    }
     
     // 如果外部没有提供数据，则自行获取
-    if (!externalProcessModels || !externalExtractModels) {
+    if (!externalProcessModels || !externalExtractModels || !externalImageModels) {
       fetchModels();
     }
-  }, [externalProcessModels, externalExtractModels, fetchModels]);
+  }, [externalProcessModels, externalExtractModels, externalImageModels, fetchModels]);
 
   // 定义Collapse的items配置
   const collapseItems = [

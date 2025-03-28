@@ -5,7 +5,7 @@ import request from '../../utils/request';
 import { useNavigate } from 'react-router-dom';
 import './style.css';
 import ArticleTypeConfigForm from '../article-type/components/ArticleTypeConfigForm';
-import { getTaskModels } from '../../utils/modelUtils';
+import { getTaskModels, getImageDescriptionModels } from '../../utils/modelUtils';
 
 const { Step } = Steps;
 const { Option } = Select;
@@ -49,6 +49,7 @@ const ReviewWizard = () => {
   const [configFormKey, setConfigFormKey] = useState(0);
   const [processModels, setProcessModels] = useState([]);
   const [extractModels, setExtractModels] = useState([]);
+  const [imageModels, setImageModels] = useState([]);
   const navigate = useNavigate();
 
   const handleSearch = async (q) => {
@@ -84,12 +85,14 @@ const ReviewWizard = () => {
       // 当用户在第一步时，预加载模型数据
       const preloadModels = async () => {
         try {
-          const [processModelsData, extractModelsData] = await Promise.all([
+          const [processModelsData, extractModelsData, imageModelsData] = await Promise.all([
             getTaskModels('process_with_llm'),
-            getTaskModels('extract_structured_data')
+            getTaskModels('extract_structured_data'),
+            getImageDescriptionModels()
           ]);
           setProcessModels(processModelsData);
           setExtractModels(extractModelsData);
+          setImageModels(imageModelsData);
         } catch (error) {
           console.error('预加载模型数据失败:', error);
         }
@@ -180,7 +183,8 @@ const ReviewWizard = () => {
             form={form} 
             showBasicSettings={false}
             externalProcessModels={processModels}
-            externalExtractModels={extractModels} 
+            externalExtractModels={extractModels}
+            externalImageModels={imageModels}
           />
         </>
       ),
