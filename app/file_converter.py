@@ -7,6 +7,8 @@ from pathlib import Path
 import base64
 import json
 from typing import Dict, List, Tuple, Optional
+import time
+from timeout_decorator import timeout, TimeoutError
 
 # 尝试导入Mistral相关包
 try:
@@ -114,12 +116,28 @@ class AdvancedMarkdownConverter:
         self.enable_image_description = self.config.get("enable_image_description", True)
         # 添加日志记录功能
         self.logger = self.config.get("logger", lambda msg: print(msg))
+        # 添加临时文件目录列表
+        self.temp_dirs = []
         
         if not MISTRAL_AVAILABLE:
             raise ImportError("高级转换需要安装mistralai包: pip install mistralai")
             
         if not self.api_key:
             raise ValueError("高级转换需要提供Mistral API密钥，可以通过环境变量MISTRAL_API_KEY设置或在项目配置中提供")
+    
+    def __del__(self):
+        """清理临时文件"""
+        self.cleanup()
+    
+    def cleanup(self):
+        """清理所有临时文件"""
+        for temp_dir in self.temp_dirs:
+            try:
+                if os.path.exists(temp_dir):
+                    import shutil
+                    shutil.rmtree(temp_dir)
+            except Exception as e:
+                print(f"清理临时目录失败: {str(e)}")
     
     def replace_images_in_markdown(self, markdown_str: str, images_dict: Dict[str, str]) -> str:
         """替换Markdown中的图片路径
@@ -149,6 +167,9 @@ class AdvancedMarkdownConverter:
         os.makedirs(output_dir, exist_ok=True)
         images_dir = os.path.join(output_dir, "images")
         os.makedirs(images_dir, exist_ok=True)
+        
+        # 记录临时目录
+        self.temp_dirs.append(output_dir)
         
         all_markdowns = []
         all_images = {}
@@ -180,6 +201,34 @@ class AdvancedMarkdownConverter:
         
         return complete_md_path, all_images
     
+    @timeout(30)  # 30秒超时
+    def _generate_single_image_description(self, img_path: str, model_params: Dict) -> str:
+        """生成单张图片的描述
+        
+        Args:
+            img_path: 图片路径
+            model_params: 模型参数
+            
+        Returns:
+            图片描述文本
+        """
+        with open(img_path, "rb") as img_file:
+            base64_image = base64.b64encode(img_file.read()).decode("utf-8")
+        
+        response = completion(
+            model=self.image_model,
+            messages=[
+                {"role": "system", "content": "你是一个图像描述助手。描述图像内容，详细且简洁。"},
+                {"role": "user", "content": [
+                    {"type": "text", "text": "请描述这张图片的内容，提供清晰、准确的描述。"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
+                ]}
+            ],
+            **model_params
+        )
+        
+        return response.choices[0].message.content
+
     def generate_image_descriptions(self, images: Dict[str, Dict]) -> Dict[str, str]:
         """生成图片描述
         
@@ -196,38 +245,43 @@ class AdvancedMarkdownConverter:
         total_images = len(images)
         self.logger(f"开始处理 {total_images} 张图片的描述")
         
+        # 检查是否使用 lm_studio 模型，如果是则添加 base_url 参数
+        model_params = {}
+        if self.image_model.startswith("lm_studio"):
+            model_params["base_url"] = "http://127.0.0.1:1234/v1"
+        
         for idx, (img_id, img_info) in enumerate(images.items(), 1):
             try:
                 self.logger(f"正在处理第 {idx}/{total_images} 张图片 (ID: {img_id})")
                 img_path = img_info["path"]
-                # 读取图片为base64
-                with open(img_path, "rb") as img_file:
-                    base64_image = base64.b64encode(img_file.read()).decode("utf-8")
                 
-                # 使用LLM生成图片描述
-                self.logger(f"使用模型 {self.image_model} 生成图片描述")
+                # 重试机制
+                max_retries = 3
+                retry_delay = 5
+                last_error = None
                 
-                # 检查是否使用 lm_studio 模型，如果是则添加 base_url 参数
-                model_params = {}
-                if self.image_model.startswith("lm_studio"):
-                    model_params["base_url"] = "http://127.0.0.1:1234/v1"
+                for retry in range(max_retries):
+                    try:
+                        self.logger(f"使用模型 {self.image_model} 生成图片描述 (尝试 {retry + 1}/{max_retries})")
+                        desc_text = self._generate_single_image_description(img_path, model_params)
+                        descriptions[img_id] = desc_text
+                        self.logger(f"图片 {img_id} 描述生成完成")
+                        break
+                    except TimeoutError:
+                        last_error = "请求超时"
+                        if retry < max_retries - 1:
+                            self.logger(f"图片 {img_id} 描述生成超时，{retry_delay}秒后重试")
+                            time.sleep(retry_delay)
+                    except Exception as e:
+                        last_error = str(e)
+                        if retry < max_retries - 1:
+                            self.logger(f"图片 {img_id} 描述生成失败: {last_error}，{retry_delay}秒后重试")
+                            time.sleep(retry_delay)
                 
-                response = completion(
-                    model=self.image_model,
-                    messages=[
-                        {"role": "system", "content": "你是一个图像描述助手。描述图像内容，详细且简洁。"},
-                        {"role": "user", "content": [
-                            {"type": "text", "text": "请描述这张图片的内容，提供清晰、准确的描述。"},
-                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{base64_image}"}}
-                        ]}
-                    ],
-                    **model_params
-                )
-                
-                # 获取描述文本
-                desc_text = response.choices[0].message.content
-                descriptions[img_id] = desc_text
-                self.logger(f"图片 {img_id} 描述生成完成")
+                if img_id not in descriptions:
+                    error_msg = f"在{max_retries}次尝试后仍然失败：{last_error}"
+                    descriptions[img_id] = error_msg
+                    self.logger(f"图片 {img_id} 描述生成最终失败: {error_msg}")
                 
             except Exception as e:
                 error_msg = f"无法生成描述：{str(e)}"

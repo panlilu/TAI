@@ -17,3 +17,4 @@ litellm==1.55.12
 tomli==2.0.1
 mistralai>=1.5.1
 importlib-resources>=6.0.0
+timeout_decorator
