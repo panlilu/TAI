@@ -650,16 +650,6 @@ async def create_project(
     # 创建project，从article_type完整深拷贝config
     project_config = json.loads(json.dumps(article_type.config or {}))
     
-    # 如果项目配置中没有tasks字段，添加默认的任务配置
-    if "tasks" not in project_config:
-        project_config["tasks"] = {}
-    
-    # 确保extract_structured_data配置被完整保留，即使值为空
-    if "tasks" in project_config and "extract_structured_data" in project_config["tasks"]:
-        extract_config = project_config["tasks"]["extract_structured_data"]
-        if "extraction_prompt" not in extract_config:
-            extract_config["extraction_prompt"] = ""
-    
     # 如果提供了新的配置，合并它
     if getattr(project, 'config', None):
         # 先处理顶层配置
